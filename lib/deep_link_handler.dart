@@ -1,18 +1,20 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:uni_links/uni_links.dart';
+import 'package:app_links/app_links.dart';
 
 final supabase = Supabase.instance.client;
 
 class DeepLinkHandler {
   static StreamSubscription<Uri?>? _sub;
+  static AppLinks? _appLinks;
 
   /// Inicializa a escuta de deep links (somente mobile)
   static void init() {
     if (kIsWeb) return;
 
-    _sub = uriLinkStream.listen((Uri? uri) async {
+    _appLinks = AppLinks();
+    _sub = _appLinks!.uriLinkStream.listen((Uri? uri) async {
       if (uri != null) {
         await _handleLink(uri);
       }
@@ -42,5 +44,6 @@ class DeepLinkHandler {
   static void dispose() {
     _sub?.cancel();
     _sub = null;
+    _appLinks = null;
   }
 }

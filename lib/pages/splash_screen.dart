@@ -6,7 +6,7 @@ import 'login_page.dart';
 import 'home_page.dart';
 import 'redefinir_senha_page.dart';
 import '../deep_link_handler.dart';
-import 'package:uni_links/uni_links.dart';
+import 'package:app_links/app_links.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -50,10 +50,11 @@ class _SplashScreenState extends State<SplashScreen> {
     if (kIsWeb) return; // Protege o web
 
     try {
-      final initialLink = await getInitialLink();
+      final appLinks = AppLinks();
+      final Uri? initialLink = await appLinks.getInitialAppLink();
       if (initialLink != null && mounted) {
         _aguardandoDeepLink = true;
-        await DeepLinkHandler.handleInitialLink(initialLink);
+        await DeepLinkHandler.handleInitialLink(initialLink.toString());
       }
     } catch (e) {
       debugPrint('Erro ao capturar deep link inicial: $e');
