@@ -1,12 +1,8 @@
-import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'login_page.dart';
-import 'home_page.dart';
-import 'redefinir_senha_page.dart';
-import '../deep_link_handler.dart';
 import 'package:app_links/app_links.dart';
+import '../deep_link_handler.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -16,7 +12,6 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  StreamSubscription<AuthState>? _authStateSubscription;
   bool _isNavigated = false;
   bool _aguardandoDeepLink = false;
 
@@ -24,7 +19,6 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
 
-    // Apenas mobile (Android/iOS)
     if (!kIsWeb) {
       DeepLinkHandler.init();
       _checkInitialDeepLink();
@@ -45,74 +39,44 @@ class _SplashScreenState extends State<SplashScreen> {
     });
   }
 
-  /// Captura deep link inicial (somente mobile)
   Future<void> _checkInitialDeepLink() async {
-    if (kIsWeb) return; // Protege o web
-
     try {
-      final appLinks = AppLinks();
-      final Uri? initialLink = await appLinks.getInitialAppLink();
-      if (initialLink != null && mounted) {
+      final initialLink = await AppLinks().getInitialAppLink();
+      if (initialLink != null) {
+        debugPrint('Deep link inicial detectado: $initialLink');
         _aguardandoDeepLink = true;
+
+        // Processa o link e navega direto para redefinição
         await DeepLinkHandler.handleInitialLink(initialLink.toString());
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/redefinir-senha');
+          _isNavigated = true;
+        }
       }
     } catch (e) {
-      debugPrint('Erro ao capturar deep link inicial: $e');
+      debugPrint('Erro ao verificar deep link inicial: $e');
     }
   }
 
   void _setupAuthListener() {
-    _authStateSubscription =
-        Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      final event = data.event;
-      final session = data.session;
-      _onAuthStateChange(event, session);
+    Supabase.instance.client.auth.onAuthStateChange.listen((event) {
+      final session = event.session;
+      if (session != null && !_isNavigated) {
+        _navigateToHome(session);
+      }
     });
   }
 
-  void _onAuthStateChange(AuthChangeEvent event, Session? session) {
-    if (!mounted || _isNavigated) return;
-
-    // Password recovery disparado pelo Supabase
-    if (event == AuthChangeEvent.passwordRecovery) {
-      _isNavigated = true;
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const RedefinirSenhaPage()),
-      );
-      return;
-    }
-
-    // Usuário logado
-    if (session != null &&
-        (event == AuthChangeEvent.signedIn ||
-            event == AuthChangeEvent.tokenRefreshed)) {
-      _navigateToHome(session);
-    }
-  }
-
   void _navigateToHome(Session session) {
-    if (_isNavigated || !mounted) return;
-
-    final salaoId = session.user.userMetadata?['salao_id'] ?? '';
+    if (!mounted) return;
     _isNavigated = true;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => HomePage(salaoId: salaoId)),
-    );
+    Navigator.of(context).pushReplacementNamed('/home');
   }
 
   void _navigateToLogin() {
-    if (_isNavigated || !mounted) return;
+    if (!mounted) return;
     _isNavigated = true;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-    );
-  }
-
-  @override
-  void dispose() {
-    _authStateSubscription?.cancel();
-    if (!kIsWeb) DeepLinkHandler.dispose();
-    super.dispose();
+    Navigator.of(context).pushReplacementNamed('/login');
   }
 
   @override

@@ -77,7 +77,7 @@ class _LoginPageState extends State<LoginPage> {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(mensagem)));
   }
-
+  /*
   Future<void> enviarEmailRedefinicaoSenha() async {
     FocusScope.of(context).unfocus();
     final email = emailController.text.trim();
@@ -106,6 +106,41 @@ class _LoginPageState extends State<LoginPage> {
       mostrarErro('Erro ao enviar e-mail: ${e.toString()}');
     }
   }
+  */
+  Future<void> enviarEmailRedefinicaoSenha() async {
+    FocusScope.of(context).unfocus();
+    final email = emailController.text.trim();
+
+    if (email.isEmpty) {
+      mostrarErro('Informe o e-mail para redefinir a senha.');
+      return;
+    }
+
+    const String deepLink = 'salaopro://redefinir-senha';
+
+    try {
+      debugPrint('Chamando resetPasswordForEmail para $email...');
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: deepLink,
+      );
+      debugPrint('Supabase retornou sucesso no resetPasswordForEmail');
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('📧 E-mail de redefinição enviado. Verifique sua caixa de entrada.'),
+        ),
+      );
+    } on AuthException catch (e) {
+      debugPrint('AuthException: ${e.message}');
+      mostrarErro(_traduzErro(e.message));
+    } catch (e) {
+      debugPrint('Erro inesperado: $e');
+      mostrarErro('Erro ao enviar e-mail: ${e.toString()}');
+    }
+  }
+
 
   String _traduzErro(String erroOriginal) {
     final erro = erroOriginal.toLowerCase();

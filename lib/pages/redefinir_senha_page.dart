@@ -15,6 +15,7 @@ class _RedefinirSenhaPageState extends State<RedefinirSenhaPage> {
   bool _isLoading = false;
   String? _errorMessage;
 
+  /*
   Future<void> _updatePassword() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -37,6 +38,60 @@ class _RedefinirSenhaPageState extends State<RedefinirSenhaPage> {
           const SnackBar(content: Text('Senha redefinida com sucesso!')),
         );
         // Redireciona para Login
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      } else {
+        if (!mounted) return;
+        setState(() {
+          _errorMessage = 'Não foi possível redefinir a senha. Tente novamente.';
+        });
+      }
+    } on AuthException catch (e) {
+      setState(() {
+        _errorMessage = 'Erro de autenticação: ${e.message}';
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Erro inesperado: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+  */
+  Future<void> _updatePassword() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final newPassword = _senhaController.text.trim();
+
+      // 🔑 Verifica se há sessão ativa
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session == null) {
+        setState(() {
+          _errorMessage = 'Nenhuma sessão ativa. O link pode ter expirado.';
+        });
+        return;
+      }
+
+      // Atualiza a senha do usuário logado (via deep link recovery)
+      final response = await Supabase.instance.client.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
+
+      if (response.user != null) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Senha redefinida com sucesso!')),
+        );
         Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
       } else {
         if (!mounted) return;
