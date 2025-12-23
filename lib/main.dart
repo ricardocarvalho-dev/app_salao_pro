@@ -19,18 +19,28 @@ final navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // ✅ Garante que o .env está incluído no pubspec.yaml
   if (!kIsWeb) {
-    await dotenv.load(fileName: 'assets/.env');
+    try {
+      await dotenv.load(fileName: 'assets/.env');
+    } catch (e) {
+      debugPrint('Erro ao carregar .env: $e');
+    }
+  }
+
+  // ✅ Valida variáveis antes de inicializar Supabase
+  final supabaseUrl = kIsWeb ? 'https://xwbabsvbcwlqfgcnmxtj.supabase.co' : dotenv.env['SUPABASE_URL'];
+  final supabaseKey = kIsWeb
+      ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3YmFic3ZiY3dscWZnY25teHRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1MTY1NjMsImV4cCI6MjA3MzA5MjU2M30.ENSnMxK61X0jXuqyftmlw51p3K7pd_ON7eBDZppPY0U'
+      : dotenv.env['SUPABASE_ANON_KEY'];
+
+  if (supabaseUrl == null || supabaseKey == null) {
+    throw Exception('SUPABASE_URL ou SUPABASE_ANON_KEY não encontrados');
   }
 
   await Supabase.initialize(
-    url: kIsWeb
-        ? 'https://xwbabsvbcwlqfgcnmxtj.supabase.co'
-        : dotenv.env['SUPABASE_URL']!,
-    anonKey: kIsWeb
-        ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3YmFic3ZiY3dscWZnY25teHRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1MTY1NjMsImV4cCI6MjA3MzA5MjU2M30.ENSnMxK61X0jXuqyftmlw51p3K7pd_ON7eBDZppPY0U' 
-        : dotenv.env['SUPABASE_ANON_KEY']!,
-    // ⚠️ Removido o parâmetro authOptions, não existe na versão 1.x
+    url: supabaseUrl,
+    anonKey: supabaseKey,
   );
 
   await initializeDateFormatting('pt_BR', null);
@@ -54,25 +64,22 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    // Inicializa deep links logo após o primeiro frame
-    /*
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = navigatorKey.currentContext;
-      if (ctx != null) {
-        DeepLinkHandler.initUniLinks(ctx);
+      try {
+        DeepLinkHandler.init();
+      } catch (e, s) {
+        debugPrint('Erro ao inicializar DeepLinkHandler: $e\n$s');
       }
-    });
-    */
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      //DeepLinkHandler.initUniLinks();
-      DeepLinkHandler.init();
     });
   }
 
   @override
   void dispose() {
-    //DeepLinkHandler.disposeUniLinks();
-    DeepLinkHandler.dispose();
+    try {
+      DeepLinkHandler.dispose();
+    } catch (e) {
+      debugPrint('Erro ao liberar DeepLinkHandler: $e');
+    }
     super.dispose();
   }
 
@@ -89,7 +96,7 @@ class _MyAppState extends State<MyApp> {
       debugShowCheckedModeBanner: false,
       routes: {
         '/login': (_) => const LoginPage(),
-        '/redefinir-senha': (_) => const RedefinirSenhaPage(), // ✅ adicionada
+        '/redefinir-senha': (_) => const RedefinirSenhaPage(),
       },
       home: const SplashScreen(),
     );

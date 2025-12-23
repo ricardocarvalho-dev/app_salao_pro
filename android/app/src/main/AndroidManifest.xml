@@ -1,4 +1,9 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.app_salao_pro">
+
+    <!-- ✅ Permissão de internet para Supabase -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
         android:label="app_salao_pro"
         android:name="${applicationName}"
@@ -7,7 +12,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -24,17 +29,23 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
-            <!-- ✅ Deep Links Customizados: salaopro://login-callback e salaopro://redefinir-senha -->
+            <!-- ✅ Deep Link Supabase (https) -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
                 <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="xwbabsvbcwlqfgcnmxtj.supabase.co"
+                      android:pathPrefix="/auth/v1/callback"/>
+            </intent-filter>
 
-                <!-- Aceita salaopro://login-callback -->
-                <data android:scheme="salaopro" android:host="login-callback" />
-
-                <!-- Aceita salaopro://redefinir-senha -->
-                <data android:scheme="salaopro" android:host="redefinir-senha" />
+            <!-- ✅ Deep Links Customizados -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="salaopro" android:host="login-callback"/>
+                <data android:scheme="salaopro" android:host="redefinir-senha"/>
             </intent-filter>
         </activity>
 
