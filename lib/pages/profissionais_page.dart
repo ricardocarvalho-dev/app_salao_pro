@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:multi_select_flutter/multi_select_flutter.dart';
 import '../models/profissional_model.dart';
 import '../services/profissional_service.dart';
 
@@ -29,20 +30,19 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
     setState(() => carregando = true);
     try {
       final lista = await service.listarPorSalao(widget.salaoId);
+
       final espResponse = await Supabase.instance.client
           .from('especialidades')
           .select('id, nome')
           .order('nome');
 
-      final especialidadesMap = List<Map<String, dynamic>>.from(espResponse);
-
-      for (var profissional in lista) {
-        final esp = especialidadesMap.firstWhere(
-          (e) => e['id'] == profissional.especialidadeId,
-          orElse: () => {'nome': 'Especialidade'},
-        );
-        profissional.nomeEspecialidade = esp['nome'];
-      }
+      // Converte para tipos estáveis (String) — importante no Web
+      final especialidadesMap = (espResponse as List<dynamic>)
+          .map((e) => {
+                'id': (e['id'] as dynamic).toString(),
+                'nome': (e['nome'] as dynamic).toString(),
+              })
+          .toList();
 
       lista.sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
 
@@ -57,9 +57,11 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
     }
   }
 
+
   Future<void> mostrarFormulario({ProfissionalModel? profissional}) async {
     final nomeController = TextEditingController(text: profissional?.nome ?? '');
-    String? especialidadeSelecionada = profissional?.especialidadeId;
+    List<String> especialidadesSelecionadas = profissional?.especialidadeIds ?? [];
+    String modoAgendamentoSelecionado = profissional?.modoAgendamento ?? 'por_profissional';
 
     await showDialog(
       context: context,
@@ -78,15 +80,26 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: especialidadeSelecionada,
-                decoration: const InputDecoration(labelText: 'Especialidade'),
-                items: [
-                  const DropdownMenuItem(value: null, child: Text('Selecione')),
-                  ...especialidades.map((esp) {
-                    return DropdownMenuItem(value: esp['id'], child: Text(esp['nome']));
-                  }),
+                value: modoAgendamentoSelecionado,
+                decoration: const InputDecoration(labelText: 'Modo de Agendamento'),
+                items: const [
+                  DropdownMenuItem(value: 'por_profissional', child: Text('Por Profissional')),
+                  DropdownMenuItem(value: 'por_servico', child: Text('Por Serviço')),
                 ],
-                onChanged: (value) => especialidadeSelecionada = value,
+                onChanged: (value) {
+                  modoAgendamentoSelecionado = value ?? 'por_profissional';
+                },
+              ),
+              const SizedBox(height: 12),
+              MultiSelectDialogField<String>(
+                items: especialidades
+                    .map((esp) => MultiSelectItem<String>( (esp['id'] as dynamic).toString(), (esp['nome'] as dynamic).toString(),)).toList(),
+                initialValue: especialidadesSelecionadas,
+                title: const Text("Especialidades"),
+                buttonText: const Text("Selecione especialidades"),
+                onConfirm: (values) {
+                  especialidadesSelecionadas = values;
+                },
               ),
             ],
           ),
@@ -99,7 +112,7 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
           ElevatedButton(
             onPressed: () async {
               final nome = nomeController.text.trim();
-              if (nome.isEmpty || especialidadeSelecionada == null) {
+              if (nome.isEmpty || especialidadesSelecionadas.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Preencha todos os campos')),
                 );
@@ -109,8 +122,9 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
               final model = ProfissionalModel(
                 id: profissional?.id ?? '',
                 nome: nome,
-                especialidadeId: especialidadeSelecionada!,
                 salaoId: widget.salaoId,
+                especialidadeIds: especialidadesSelecionadas,
+                modoAgendamento: modoAgendamentoSelecionado,
               );
 
               try {
@@ -162,7 +176,7 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
   Widget build(BuildContext context) {
     final listaFiltrada = especialidadeFiltro == null
         ? profissionais
-        : profissionais.where((p) => p.especialidadeId == especialidadeFiltro).toList();
+        : profissionais.where((p) => p.especialidadeIds.contains(especialidadeFiltro)).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Profissionais')),
@@ -209,8 +223,13 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
                                           style: Theme.of(context).textTheme.titleMedium),
                                       const SizedBox(height: 6),
                                       Text(
-                                        'Especialidade: ${profissional.nomeEspecialidade ?? 'Especialidade'}',
+                                        'Especialidades: ${profissional.nomesEspecialidades?.join(", ") ?? "Nenhuma"}',
                                         style: Theme.of(context).textTheme.bodyMedium,
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Agendamento: ${profissional.modoAgendamento == 'por_profissional' ? 'Por Profissional' : 'Por Serviço'}',
+                                        style: Theme.of(context).textTheme.bodySmall,
                                       ),
                                       const SizedBox(height: 8),
                                       Row(

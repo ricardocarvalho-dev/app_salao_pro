@@ -1,29 +1,41 @@
 class ProfissionalModel {
   final String id;
   final String nome;
-  final String especialidadeId;
   final String salaoId;
-  String? nomeEspecialidade; // ✅ sem final para permitir atribuição
+
+  /// Lista de IDs de especialidades vinculadas ao profissional
+  List<String> especialidadeIds;
+
+  /// Lista opcional com os nomes das especialidades (para exibição)
+  List<String>? nomesEspecialidades;
+
+  /// Define se o agendamento é por profissional ou por serviço/especialidade
+  String modoAgendamento;
 
   ProfissionalModel({
     required this.id,
     required this.nome,
-    required this.especialidadeId,
     required this.salaoId,
-    this.nomeEspecialidade,
+    required this.especialidadeIds,
+    this.nomesEspecialidades,
+    this.modoAgendamento = 'por_profissional', // valor padrão
   });
 
   ProfissionalModel copyWith({
     String? id,
     String? nome,
-    String? especialidadeId,
     String? salaoId,
+    List<String>? especialidadeIds,
+    List<String>? nomesEspecialidades,
+    String? modoAgendamento,
   }) {
     return ProfissionalModel(
       id: id ?? this.id,
       nome: nome ?? this.nome,
-      especialidadeId: especialidadeId ?? this.especialidadeId,
       salaoId: salaoId ?? this.salaoId,
+      especialidadeIds: especialidadeIds ?? this.especialidadeIds,
+      nomesEspecialidades: nomesEspecialidades ?? this.nomesEspecialidades,
+      modoAgendamento: modoAgendamento ?? this.modoAgendamento,
     );
   }
 
@@ -31,8 +43,16 @@ class ProfissionalModel {
     return ProfissionalModel(
       id: map['id'] ?? '',
       nome: map['nome'] ?? '',
-      especialidadeId: map['especialidade_id'] ?? '',
       salaoId: map['salao_id'] ?? '',
+      especialidadeIds: (map['especialidade_ids'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
+      nomesEspecialidades: map['nomes_especialidades'] != null
+          ? (map['nomes_especialidades'] as List<dynamic>)
+              .map((e) => e.toString())
+              .toList()
+          : null,
+      modoAgendamento: map['modo_agendamento'] ?? 'por_profissional',
     );
   }
 
@@ -40,8 +60,9 @@ class ProfissionalModel {
     return {
       'id': id,
       'nome': nome,
-      'especialidade_id': especialidadeId,
       'salao_id': salaoId,
+      'especialidade_ids': especialidadeIds,
+      'modo_agendamento': modoAgendamento,
     };
   }
 }

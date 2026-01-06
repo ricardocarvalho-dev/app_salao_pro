@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_salao_pro/models/agendamento_model.dart';
 import 'package:app_salao_pro/services/agendamento_service.dart';
 import 'package:app_salao_pro/pages/agendamento_movel.dart';
-import 'package:app_salao_pro/widgets/cabecalho_salao_pro.dart';
 
 class AgendaPage extends StatefulWidget {
   final String salaoId;
@@ -26,7 +25,6 @@ class _AgendaPageState extends State<AgendaPage> {
   List<AgendamentoModel> agendamentos = [];
   late AgendamentoService service;
 
-  String modoAgendamento = 'por_profissional';
   String? profissionalSelecionado;
   String? servicoSelecionado;
 
@@ -43,31 +41,18 @@ class _AgendaPageState extends State<AgendaPage> {
     super.initState();
     _selectedDay = _focusedDay;
     service = AgendamentoService(widget.salaoId);
-    buscarModoAgendamento();
     carregarFiltros().then((_) => carregarAgendamentos());
-  }
-
-  Future<void> buscarModoAgendamento() async {
-    try {
-      final response = await Supabase.instance.client
-          .from('saloes')
-          .select('modo_agendamento')
-          .eq('id', widget.salaoId)
-          .single();
-
-      setState(() {
-        modoAgendamento = response['modo_agendamento'] ?? 'por_profissional';
-      });
-    } catch (_) {}
   }
 
   Future<void> carregarFiltros() async {
     final supabase = Supabase.instance.client;
 
+    // Profissionais com agenda própria
     final profs = await supabase
         .from('profissionais')
         .select()
         .eq('salao_id', widget.salaoId)
+        .eq('modo_agendamento', 'por_profissional')
         .order('nome');
 
     final servs = await supabase
@@ -87,9 +72,9 @@ class _AgendaPageState extends State<AgendaPage> {
       servicos = List<Map<String, dynamic>>.from(servs);
       clientes = List<Map<String, dynamic>>.from(clis);
 
-      mapaProfissionais = {for (var p in profs) p['id']: p['nome']};
-      mapaServicos = {for (var s in servs) s['id']: s['nome']};
-      mapaClientes = {for (var c in clis) c['id']: c['nome']};
+      mapaProfissionais = {for (var p in profs) p['id'].toString(): p['nome'].toString()};
+      mapaServicos = {for (var s in servs) s['id'].toString(): s['nome'].toString()};
+      mapaClientes = {for (var c in clis) c['id'].toString(): c['nome'].toString()};
     });
   }
 
@@ -106,7 +91,9 @@ class _AgendaPageState extends State<AgendaPage> {
       setState(() {
         agendamentos = ags;
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Erro ao carregar agendamentos: $e');
+    }
   }
 
   Future<void> cancelarAgendamento(String agendamentoId) async {
@@ -135,7 +122,9 @@ class _AgendaPageState extends State<AgendaPage> {
       try {
         await service.excluir(id);
         await carregarAgendamentos();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Erro ao excluir: $e');
+      }
     }
   }
 
@@ -144,17 +133,13 @@ class _AgendaPageState extends State<AgendaPage> {
 
     return Column(
       children: [
-        // ---- CALENDÁRIO CORRIGIDO ----
         TableCalendar(
           locale: 'pt_BR',
           firstDay: DateTime.utc(2020, 1, 1),
           lastDay: DateTime.utc(2030, 12, 31),
           focusedDay: _focusedDay,
           selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-
-          // Agora permite clicar em qualquer data:
           enabledDayPredicate: (_) => true,
-
           onDaySelected: (selectedDay, focusedDay) {
             setState(() {
               _selectedDay = selectedDay;
@@ -162,12 +147,10 @@ class _AgendaPageState extends State<AgendaPage> {
             });
             carregarAgendamentos();
           },
-
           calendarFormat: CalendarFormat.week,
           availableCalendarFormats: const {CalendarFormat.week: 'Semana'},
           rowHeight: 36,
           daysOfWeekHeight: 16,
-
           headerStyle: const HeaderStyle(
             formatButtonVisible: false,
             titleCentered: true,
@@ -175,7 +158,6 @@ class _AgendaPageState extends State<AgendaPage> {
             leftChevronIcon: Icon(Icons.chevron_left, size: 20),
             rightChevronIcon: Icon(Icons.chevron_right, size: 20),
           ),
-
           calendarStyle: CalendarStyle(
             defaultTextStyle: const TextStyle(fontSize: 12),
             weekendTextStyle: const TextStyle(fontSize: 12),
@@ -192,40 +174,44 @@ class _AgendaPageState extends State<AgendaPage> {
 
         const SizedBox(height: 16),
 
-        // ---- FILTROS ----
-        if (modoAgendamento == 'por_profissional')
-          DropdownButtonFormField<String>(
-            value: profissionalSelecionado,
-            decoration: const InputDecoration(labelText: 'Profissional'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('Todos')),
-              ...profissionais.map((p) => DropdownMenuItem(value: p['id'], child: Text(p['nome']))),
-            ],
-            onChanged: (v) {
-              setState(() => profissionalSelecionado = v);
-              carregarAgendamentos();
-            },
-            style: estilo,
-          ),
-
-        if (modoAgendamento == 'por_servico')
-          DropdownButtonFormField<String>(
-            value: servicoSelecionado,
-            decoration: const InputDecoration(labelText: 'Serviço'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('Todos')),
-              ...servicos.map((s) => DropdownMenuItem(value: s['id'], child: Text(s['nome']))),
-            ],
-            onChanged: (v) {
-              setState(() => servicoSelecionado = v);
-              carregarAgendamentos();
-            },
-            style: estilo,
-          ),
+        // Filtro de profissionais (só quem tem agenda própria)
+        DropdownButtonFormField<String>(
+          value: profissionalSelecionado,
+          decoration: const InputDecoration(labelText: 'Profissional'),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('Todos')),
+            ...profissionais.map(
+              (p) => DropdownMenuItem(value: p['id'].toString(), child: Text(p['nome'].toString())),
+            ),
+          ],
+          onChanged: (v) {
+            setState(() => profissionalSelecionado = v);
+            carregarAgendamentos();
+          },
+          style: estilo,
+        ),
 
         const SizedBox(height: 16),
 
-        // ---- BOTÃO DE NOVO AGENDAMENTO ----
+        // Filtro de serviços (para agendamento por serviço)
+        DropdownButtonFormField<String>(
+          value: servicoSelecionado,
+          decoration: const InputDecoration(labelText: 'Serviço'),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('Todos')),
+            ...servicos.map(
+              (s) => DropdownMenuItem(value: s['id'].toString(), child: Text(s['nome'].toString())),
+            ),
+          ],
+          onChanged: (v) {
+            setState(() => servicoSelecionado = v);
+            carregarAgendamentos();
+          },
+          style: estilo,
+        ),
+
+        const SizedBox(height: 16),
+
         ElevatedButton.icon(
           onPressed: () async {
             if (_selectedDay == null) {
@@ -255,14 +241,16 @@ class _AgendaPageState extends State<AgendaPage> {
                   clienteId: Supabase.instance.client.auth.currentUser?.id ?? '',
                   salaoId: widget.salaoId,
                   dataSelecionada: _selectedDay!,
-                  modoAgendamento: modoAgendamento,
+                  // Decide o fluxo pelo que foi selecionado nos filtros
+                  modoAgendamento: profissionalSelecionado != null ? 'por_profissional' : 'por_servico',
+                  profissionalId: profissionalSelecionado,
+                  servicoId: servicoSelecionado,
                 ),
               ),
             );
 
             if (criado == true) carregarAgendamentos();
           },
-
           icon: const Icon(Icons.add, color: Colors.white),
           label: Text('Novo Agendamento', style: estilo?.copyWith(color: Colors.white)),
           style: ElevatedButton.styleFrom(
@@ -278,8 +266,7 @@ class _AgendaPageState extends State<AgendaPage> {
   Widget _buildLista() {
     if (agendamentos.isEmpty) {
       return Center(
-        child: Text('Nenhum agendamento para esse dia.',
-            style: Theme.of(context).textTheme.bodyMedium),
+        child: Text('Nenhum agendamento para esse dia.', style: Theme.of(context).textTheme.bodyMedium),
       );
     }
 
@@ -336,29 +323,20 @@ class _AgendaPageState extends State<AgendaPage> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Conteúdo principal
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(horaFormatada,
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.bold)),
+                    Text(horaFormatada, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 6),
-                    Text(nomeCliente,
-                        style: const TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600)),
+                    Text(nomeCliente, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
-                    Text('$nomeServico — $nomeProfissional',
-                        style: const TextStyle(fontSize: 13)),
+                    Text('$nomeServico — $nomeProfissional', style: const TextStyle(fontSize: 13)),
                     const SizedBox(height: 4),
-                    Text(ag.status.toUpperCase(),
-                        style: TextStyle(fontSize: 12, color: statusColor)),
+                    Text(ag.status.toUpperCase(), style: TextStyle(fontSize: 12, color: statusColor)),
                   ],
                 ),
               ),
-
-              // Ações
               Column(
                 children: [
                   IconButton(
@@ -368,14 +346,13 @@ class _AgendaPageState extends State<AgendaPage> {
                         context,
                         MaterialPageRoute(
                           builder: (_) => AgendamentoMovelPage(
-                            modoAgendamento:
-                                ag.profissionalId != null ? 'por_profissional' : 'por_servico',
+                            modoAgendamento: ag.profissionalId != null ? 'por_profissional' : 'por_servico',
                             agendamentoId: ag.id,
                             profissionalId: ag.profissionalId,
                             servicoId: ag.servicoId,
                             clienteId: ag.clienteId,
                             salaoId: widget.salaoId,
-                            dataSelecionada: widget.dataSelecionada,
+                            dataSelecionada: _selectedDay ?? widget.dataSelecionada,
                             podeAlterarCliente: false,
                           ),
                         ),

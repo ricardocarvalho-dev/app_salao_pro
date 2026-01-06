@@ -2,95 +2,70 @@ import 'package:flutter/material.dart';
 
 class AgendamentoModel {
   final String id;
-  final String clienteId;
-  final String? profissionalId;
-  final String servicoId;
   final DateTime data;
   final TimeOfDay hora;
+  final String? profissionalId; // pode ser null no modo por_servico
+  final String servicoId;
+  final String clienteId;
+  final String salaoId;
   final String status;
   final DateTime createdAt;
-  final String salaoId;
 
   AgendamentoModel({
     required this.id,
-    required this.clienteId,
-    required this.profissionalId,
-    required this.servicoId,
     required this.data,
     required this.hora,
+    this.profissionalId,
+    required this.servicoId,
+    required this.clienteId,
+    required this.salaoId,
     required this.status,
     required this.createdAt,
-    required this.salaoId,
   });
 
-  factory AgendamentoModel.fromMap(Map<String, dynamic> map) {
-    final horaStr = map['hora'] as String? ?? '00:00';
-    final horaParts = horaStr.split(':');
-
-    return AgendamentoModel(
-      id: map['id'] as String,
-      //clienteId: map['cliente_id'] as String,
-      clienteId: map['cliente_id']?.toString() ?? '',
-      profissionalId: map['profissional_id'] as String?,
-      servicoId: map['servico_id'] as String,
-      data: DateTime.parse(map['data']).toLocal(),
-      hora: TimeOfDay(
-        hour: int.tryParse(horaParts[0]) ?? 0,
-        minute: int.tryParse(horaParts[1]) ?? 0,
-      ),
-      status: map['status'] as String,
-      createdAt: DateTime.parse(map['created_at'] as String),
-      salaoId: map['salao_id'] as String,
-    );
-  }
-
-  static AgendamentoModel? fromMapSafe(Map<String, dynamic> map) {
-    try {
-      if (map['id'] == null || map['data'] == null || map['hora'] == null) return null;
-      return AgendamentoModel.fromMap(map);
-    } catch (_) {
-      return null;
-    }
-  }
-
   Map<String, dynamic> toMap() {
-    final map = {
-      'cliente_id': clienteId,
-      'profissional_id': profissionalId,
-      'servico_id': servicoId,
+    final map = <String, dynamic>{
       'data': data.toIso8601String().substring(0, 10),
       'hora': '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}',
+      'servico_id': servicoId,
+      'cliente_id': clienteId,
+      'salao_id': salaoId,
       'status': status,
       'created_at': createdAt.toIso8601String(),
-      'salao_id': salaoId,
     };
-    if (id.isNotEmpty && id != 'novo') {
+
+    // Não enviar id vazio, deixa o banco gerar
+    if (id.isNotEmpty) {
       map['id'] = id;
     }
+
+    // profissional_id pode ser null
+    if (profissionalId != null && profissionalId!.isNotEmpty) {
+      map['profissional_id'] = profissionalId;
+    } else {
+      map['profissional_id'] = null;
+    }
+
     return map;
   }
 
-  AgendamentoModel copyWith({
-    String? id,
-    String? clienteId,
-    String? profissionalId,
-    String? servicoId,
-    DateTime? data,
-    TimeOfDay? hora,
-    String? status,
-    DateTime? createdAt,
-    String? salaoId,
-  }) {
+  factory AgendamentoModel.fromMap(Map<String, dynamic> map) {
+    final partesHora = (map['hora'] as String).split(':');
+    final hora = TimeOfDay(
+      hour: int.parse(partesHora[0]),
+      minute: int.parse(partesHora[1]),
+    );
+
     return AgendamentoModel(
-      id: id ?? this.id,
-      clienteId: clienteId ?? this.clienteId,
-      profissionalId: profissionalId ?? this.profissionalId,
-      servicoId: servicoId ?? this.servicoId,
-      data: data ?? this.data,
-      hora: hora ?? this.hora,
-      status: status ?? this.status,
-      createdAt: createdAt ?? this.createdAt,
-      salaoId: salaoId ?? this.salaoId,
+      id: map['id'] ?? '',
+      data: DateTime.tryParse(map['data']) ?? DateTime.now(),
+      hora: hora,
+      profissionalId: map['profissional_id'],
+      servicoId: map['servico_id'] ?? '',
+      clienteId: map['cliente_id'] ?? '',
+      salaoId: map['salao_id'] ?? '',
+      status: map['status'] ?? 'pendente',
+      createdAt: DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
     );
   }
 }

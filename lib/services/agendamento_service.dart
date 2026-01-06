@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:app_salao_pro/models/agendamento_model.dart';
+import '../models/agendamento_model.dart';
 
 class AgendamentoService {
   final SupabaseClient _supabase;
@@ -10,11 +10,22 @@ class AgendamentoService {
 
   Future<void> adicionar(AgendamentoModel agendamento) async {
     try {
-      final agendamentoMap = agendamento.toMap();
-      print('📦 Enviando para Supabase: $agendamentoMap');
-      await _supabase.from('agendamentos').insert(agendamentoMap);
+      final map = agendamento.toMap();
+
+      // Defesa extra: nunca enviar "" para colunas *_id
+      for (final k in ['id', 'profissional_id', 'servico_id', 'cliente_id', 'salao_id']) {
+        if (map.containsKey(k) && (map[k] is String) && (map[k] as String).isEmpty) {
+          if (k == 'id') {
+            map.remove(k); // deixa o banco gerar
+          } else {
+            map[k] = null; // uuid nulo
+          }
+        }
+      }
+
+      await _supabase.from('agendamentos').insert(map);
     } catch (e) {
-      print('❌ Erro ao adicionar agendamento: $e');
+      debugPrint('Erro ao adicionar agendamento: $e');
       throw Exception('Falha ao adicionar agendamento.');
     }
   }
@@ -23,7 +34,7 @@ class AgendamentoService {
     try {
       await _supabase.from('agendamentos').delete().eq('id', agendamentoId);
     } catch (e) {
-      print('❌ Erro ao excluir agendamento: $e');
+      debugPrint('Erro ao excluir agendamento: $e');
       throw Exception('Falha ao excluir agendamento.');
     }
   }
@@ -38,7 +49,7 @@ class AgendamentoService {
           .from('agendamentos')
           .select()
           .eq('salao_id', salaoId)
-          .eq('data', data.toIso8601String().substring(0, 10));
+          .eq('data', _formatDate(data));
 
       if (profissionalId != null && profissionalId.isNotEmpty) {
         query = query.eq('profissional_id', profissionalId);
@@ -56,7 +67,7 @@ class AgendamentoService {
           .map((map) => AgendamentoModel.fromMap(map as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      print('❌ Erro ao buscar agendamentos: $e');
+      debugPrint('Erro ao buscar agendamentos: $e');
       return [];
     }
   }
@@ -67,15 +78,14 @@ class AgendamentoService {
     required String servicoId,
     String? profissionalId,
   }) async {
-    final horaStr =
-        '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}';
+    final horaStr = _formatTime(hora);
 
     try {
       var query = _supabase
           .from('agendamentos')
           .select()
           .eq('salao_id', salaoId)
-          .eq('data', data.toIso8601String().substring(0, 10))
+          .eq('data', _formatDate(data))
           .eq('hora', horaStr)
           .eq('servico_id', servicoId);
 
@@ -84,102 +94,36 @@ class AgendamentoService {
       }
 
       final response = await query.limit(1);
-
       return response is List && response.isNotEmpty;
     } catch (e) {
-      print('❌ Erro ao verificar conflito de horário: $e');
+      debugPrint('Erro ao verificar conflito de horário: $e');
       return false;
     }
   }
 
-  Future<void> criarAgendamentoPorServico({
-    required String servicoId,
-    required String clienteId,
-    required DateTime data,
-    required TimeOfDay hora,
-  }) async {
+  Future<void> atualizarHorario(
+    String agendamentoId,
+    DateTime novaData,
+    TimeOfDay novoHorario,
+  ) async {
     try {
-      final horaStr =
-          '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}';
-
-      final servicoResponse = await _supabase
-          .from('servicos')
-          .select('especialidade_id')
-          .eq('id', servicoId)
-          .single();
-
-      final especialidadeId = servicoResponse.data['especialidade_id'];
-
-      final profissionaisResponse = await _supabase
-          .from('profissionais')
-          .select('id')
-          .eq('salao_id', salaoId)
-          .eq('especialidade_id', especialidadeId);
-
-      final profissionais = profissionaisResponse.data as List<dynamic>;
-
-      for (final profissional in profissionais) {
-        final profissionalId = profissional['id'] as String;
-
-        final conflito = await existeConflito(
-          data: data,
-          hora: hora,
-          servicoId: servicoId,
-          profissionalId: profissionalId,
-        );
-
-        if (!conflito) {
-          final novoAgendamento = AgendamentoModel(
-            id: '',
-            data: data,
-            hora: hora,
-            profissionalId: profissionalId,
-            servicoId: servicoId,
-            clienteId: clienteId,
-            salaoId: salaoId,
-            status: 'pendente',
-            createdAt: DateTime.now(),
-          );
-
-          await adicionar(novoAgendamento);
-          return;
-        }
-      }
-
-      throw Exception('Nenhum profissional disponível nesse horário');
+      await _supabase
+          .from('agendamentos')
+          .update({
+            'data': _formatDate(novaData),
+            'hora': _formatTime(novoHorario),
+            'status': 'reagendado',
+          })
+          .eq('id', agendamentoId);
     } catch (e) {
-      print('❌ Erro ao criar agendamento por serviço: $e');
-      throw Exception('Falha ao criar agendamento por serviço.');
+      debugPrint('Erro ao atualizar horário: $e');
+      throw Exception('Falha ao atualizar horário.');
     }
   }
 
-  Future<List<AgendamentoModel>> buscarPorData(DateTime data) async {
-    final response = await Supabase.instance.client
-      .from('agendamentos')
-      .select('*, clientes(nome)')
-      .eq('salao_id', salaoId)
-      .eq('data', data.toIso8601String().substring(0, 10));
+  String _formatDate(DateTime d) =>
+      DateTime(d.year, d.month, d.day).toIso8601String().substring(0, 10);
 
-    return response.map((map) => AgendamentoModel.fromMap({
-      ...map,
-      'cliente_nome': map['clientes']?['nome'], // injeta o nome do cliente
-    })).toList();
-  }
-
-  Future<void> atualizarHorario(String agendamentoId, DateTime novaData, TimeOfDay novoHorario) async {
-    final supabase = Supabase.instance.client;
-
-    final novoHorarioStr = '${novoHorario.hour.toString().padLeft(2, '0')}:${novoHorario.minute.toString().padLeft(2, '0')}';
-
-    await supabase
-        .from('agendamentos')
-        .update({
-          'data': novaData.toIso8601String().substring(0, 10),
-          'hora': novoHorarioStr,
-          'status': 'reagendado',
-          //'updated_at': DateTime.now().toIso8601String(),
-        })
-        .eq('id', agendamentoId);
-  }
-  
+  String _formatTime(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 }
