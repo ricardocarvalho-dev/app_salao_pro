@@ -4,93 +4,99 @@ import '../models/profissional_model.dart';
 class ProfissionalService {
   final supabase = Supabase.instance.client;
 
-  /// Lista todos os profissionais de um salão com suas especialidades
   Future<List<ProfissionalModel>> listarPorSalao(String salaoId) async {
-    // Busca profissionais
-    final data = await supabase
+    final response = await supabase
         .from('profissionais')
-        .select()
+        .select('id, nome, modo_agendamento')
         .eq('salao_id', salaoId)
         .order('nome');
 
-    final profissionais = (data as List<dynamic>)
-        .map((item) => ProfissionalModel.fromMap(item as Map<String, dynamic>))
-        .toList();
+    final lista = List<Map<String, dynamic>>.from(response);
 
-    // Para cada profissional, buscar especialidades vinculadas
-    for (var prof in profissionais) {
-      final especs = await supabase
+    return Future.wait(lista.map((map) async {
+      final especsResponse = await supabase
           .from('profissional_especialidades')
           .select('especialidade_id, especialidades(nome)')
-          .eq('profissional_id', prof.id);
+          .eq('profissional_id', map['id']);
 
-      final especList = (especs as List<dynamic>);
+      final especs = List<Map<String, dynamic>>.from(especsResponse);
 
-      // Converte IDs e nomes explicitamente para String
-      final especIds = especList
-          .map((e) => (e['especialidade_id'] as dynamic).toString())
-          .toList();
-
-      final especNomes = especList
-          .map((e) => (e['especialidades']?['nome'] as dynamic).toString())
-          .toList();
-
-      prof.especialidadeIds = especIds;
-      prof.nomesEspecialidades = especNomes;
-    }
-
-    return profissionais;
+      return ProfissionalModel(
+        id: map['id'].toString(),
+        nome: map['nome'].toString(),
+        salaoId: salaoId,
+        modoAgendamento: map['modo_agendamento'].toString(),
+        especialidadeIds: especs.map((e) => e['especialidade_id'].toString()).toList(),
+        nomesEspecialidades: especs
+            .map((e) => (e['especialidades']?['nome'] ?? '').toString())
+            .where((nome) => nome.isNotEmpty)
+            .toList(),
+      );
+    }).toList());
   }
 
-  /// Adiciona um novo profissional com suas especialidades
-  Future<void> adicionar(ProfissionalModel profissional) async {
-    if (profissional.nome.isEmpty || profissional.salaoId.isEmpty) {
-      throw Exception('Dados do profissional incompletos');
-    }
+  Future<ProfissionalModel> buscarPorId(String profissionalId) async {
+    final response = await supabase
+        .from('profissionais')
+        .select('id, nome, salao_id, modo_agendamento')
+        .eq('id', profissionalId)
+        .single();
 
-    // Insere o profissional
+    final especsResponse = await supabase
+        .from('profissional_especialidades')
+        .select('especialidade_id, especialidades(nome)')
+        .eq('profissional_id', profissionalId);
+
+    final especs = List<Map<String, dynamic>>.from(especsResponse);
+
+    return ProfissionalModel(
+      id: response['id'].toString(),
+      nome: response['nome'].toString(),
+      salaoId: response['salao_id'].toString(),
+      modoAgendamento: response['modo_agendamento'].toString(),
+      especialidadeIds: especs.map((e) => e['especialidade_id'].toString()).toList(),
+      nomesEspecialidades: especs
+          .map((e) => (e['especialidades']?['nome'] ?? '').toString())
+          .where((nome) => nome.isNotEmpty)
+          .toList(),
+    );
+  }
+
+  Future<void> adicionar(ProfissionalModel profissional) async {
     final inserted = await supabase.from('profissionais').insert({
       'nome': profissional.nome,
       'salao_id': profissional.salaoId,
       'modo_agendamento': profissional.modoAgendamento,
     }).select().single();
 
-    final profissionalId = (inserted['id'] as dynamic).toString();
+    final profissionalId = inserted['id'].toString();
 
-    // Insere vínculos de especialidades
-    for (final especId in profissional.especialidadeIds) {
+    for (final espId in profissional.especialidadeIds) {
       await supabase.from('profissional_especialidades').insert({
         'profissional_id': profissionalId,
-        'especialidade_id': especId,
+        'especialidade_id': espId,
       });
     }
   }
 
-  /// Atualiza dados do profissional e suas especialidades
   Future<void> atualizar(ProfissionalModel profissional) async {
     await supabase.from('profissionais').update({
       'nome': profissional.nome,
       'modo_agendamento': profissional.modoAgendamento,
     }).eq('id', profissional.id);
 
-    // Remove vínculos antigos
-    await supabase
-        .from('profissional_especialidades')
-        .delete()
-        .eq('profissional_id', profissional.id);
+    await supabase.from('profissional_especialidades').delete().eq('profissional_id', profissional.id);
 
-    // Insere vínculos novos
-    for (final especId in profissional.especialidadeIds) {
+    for (final espId in profissional.especialidadeIds) {
       await supabase.from('profissional_especialidades').insert({
         'profissional_id': profissional.id,
-        'especialidade_id': especId,
+        'especialidade_id': espId,
       });
     }
   }
 
-  /// Exclui profissional e vínculos
-  Future<void> excluir(String id) async {
-    await supabase.from('profissionais').delete().eq('id', id);
-    await supabase.from('profissional_especialidades').delete().eq('profissional_id', id);
+  Future<void> excluir(String profissionalId) async {
+    await supabase.from('profissional_especialidades').delete().eq('profissional_id', profissionalId);
+    await supabase.from('profissionais').delete().eq('id', profissionalId);
   }
 }

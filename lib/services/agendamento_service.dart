@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/agendamento_model.dart';
+import 'package:intl/intl.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../agendamento/agendamento_provider.dart';
 
 class AgendamentoService {
   final SupabaseClient _supabase;
@@ -8,37 +11,115 @@ class AgendamentoService {
 
   AgendamentoService(this.salaoId) : _supabase = Supabase.instance.client;
 
-  Future<void> adicionar(AgendamentoModel agendamento) async {
+  /// ======================
+  /// ADICIONAR AGENDAMENTO
+  /// ======================
+  Future<void> adicionar(
+    AgendamentoModel agendamento,
+    WidgetRef ref,
+    BuildContext context,
+  ) async {
     try {
       final map = agendamento.toMap();
 
-      // Defesa extra: nunca enviar "" para colunas *_id
+      // ✅ Validações obrigatórias
+      if (map['cliente_id'] == null || (map['cliente_id'] as String).isEmpty) {
+        throw Exception('Cliente obrigatório para o agendamento.');
+      }
+      if (map['servico_id'] == null || (map['servico_id'] as String).isEmpty) {
+        throw Exception('Serviço obrigatório para o agendamento.');
+      }
+      if (map['data'] == null || map['hora'] == null) {
+        throw Exception('Data e horário são obrigatórios.');
+      }
+
+      // ✅ Defesa contra strings vazias em UUID
       for (final k in ['id', 'profissional_id', 'servico_id', 'cliente_id', 'salao_id']) {
-        if (map.containsKey(k) && (map[k] is String) && (map[k] as String).isEmpty) {
+        if (map.containsKey(k) && map[k] is String && (map[k] as String).isEmpty) {
           if (k == 'id') {
-            map.remove(k); // deixa o banco gerar
+            map.remove(k); // banco gera automaticamente
           } else {
-            map[k] = null; // uuid nulo
+            map[k] = null;
           }
         }
       }
 
-      await _supabase.from('agendamentos').insert(map);
+      // ✅ Prevenção de duplicidade (CORRETA)
+      var query = _supabase
+          .from('agendamentos')
+          .select()
+          .eq('servico_id', agendamento.servicoId)
+          .eq('data', _formatDate(agendamento.data))
+          .eq('hora', _formatTime(agendamento.hora));
+
+      // 🔑 Se for modo por profissional
+      if (agendamento.profissionalId != null &&
+          agendamento.profissionalId!.isNotEmpty) {
+        query = query.eq('profissional_id', agendamento.profissionalId);
+      } 
+      // 🔑 Se for modo por serviço
+      else {
+        query = query.is_('profissional_id', null);
+      }
+
+      final existing = await query.maybeSingle();
+
+      if (existing != null) {
+        throw Exception('Horário já ocupado.');
+      }
+
+      // ✅ Inserção
+      final inserted = await _supabase
+          .from('agendamentos')
+          .insert(map)
+          .select()
+          .single();
+
+      final agendamentoId = inserted['id'] as String;
+
+      // ✅ Marca horário como ocupado
+      await marcarHorarioComoOcupado(
+        servicoId: agendamento.servicoId,
+        data: agendamento.data,
+        hora: agendamento.hora,
+        profissionalId: agendamento.profissionalId,
+        agendamentoId: agendamentoId,
+        clienteId: agendamento.clienteId,
+        agendamentoStatus: agendamento.status.name,
+      );
+
+      // ✅ Atualiza provider para forçar refresh
+      ref.read(agendamentoProvider.notifier).resetAgendamento();
+
+      // ✅ Fecha a página
+      //if (Navigator.canPop(context)) Navigator.pop(context);
     } catch (e) {
       debugPrint('Erro ao adicionar agendamento: $e');
-      throw Exception('Falha ao adicionar agendamento.');
+      rethrow;
     }
   }
 
-  Future<void> excluir(String agendamentoId) async {
+  /// ======================
+  /// EXCLUIR AGENDAMENTO
+  /// ======================
+  Future<void> excluir(String agendamentoId, WidgetRef ref) async {
     try {
-      await _supabase.from('agendamentos').delete().eq('id', agendamentoId);
+      await _supabase
+          .from('agendamentos')
+          .delete()
+          .eq('id', agendamentoId);
+
+      // Atualiza provider
+      ref.read(agendamentoProvider.notifier).resetAgendamento();
     } catch (e) {
       debugPrint('Erro ao excluir agendamento: $e');
       throw Exception('Falha ao excluir agendamento.');
     }
   }
 
+  /// ======================
+  /// BUSCAR AGENDAMENTOS
+  /// ======================
   Future<List<AgendamentoModel>> getAgendamentos(
     DateTime data, {
     String? profissionalId,
@@ -54,7 +135,6 @@ class AgendamentoService {
       if (profissionalId != null && profissionalId.isNotEmpty) {
         query = query.eq('profissional_id', profissionalId);
       }
-
       if (servicoId != null && servicoId.isNotEmpty) {
         query = query.eq('servico_id', servicoId);
       }
@@ -72,57 +152,50 @@ class AgendamentoService {
     }
   }
 
-  Future<bool> existeConflito({
+  /// ======================
+  /// MARCAR HORÁRIO COMO OCUPADO
+  /// ======================
+  Future<void> marcarHorarioComoOcupado({
+    required String servicoId,
     required DateTime data,
     required TimeOfDay hora,
-    required String servicoId,
+    required String agendamentoId,
+    required String clienteId,
+    required String agendamentoStatus,
     String? profissionalId,
   }) async {
-    final horaStr = _formatTime(hora);
-
     try {
+      final horaStr = _formatTime(hora);
+
       var query = _supabase
-          .from('agendamentos')
-          .select()
-          .eq('salao_id', salaoId)
+          .from('horarios_disponiveis')
+          .update({
+            'ocupado': true,
+            'agendamento_id': agendamentoId,
+            'cliente_id': clienteId,
+            'agendamento_status': agendamentoStatus,
+          })
+          .eq('servico_id', servicoId)
           .eq('data', _formatDate(data))
-          .eq('hora', horaStr)
-          .eq('servico_id', servicoId);
+          .eq('horario', horaStr);
 
       if (profissionalId != null && profissionalId.isNotEmpty) {
         query = query.eq('profissional_id', profissionalId);
+      } else {
+        query = query.is_('profissional_id', null);
       }
 
-      final response = await query.limit(1);
-      return response is List && response.isNotEmpty;
+      await query;
     } catch (e) {
-      debugPrint('Erro ao verificar conflito de horário: $e');
-      return false;
+      debugPrint('Erro ao marcar horário como ocupado: $e');
+      rethrow;
     }
   }
 
-  Future<void> atualizarHorario(
-    String agendamentoId,
-    DateTime novaData,
-    TimeOfDay novoHorario,
-  ) async {
-    try {
-      await _supabase
-          .from('agendamentos')
-          .update({
-            'data': _formatDate(novaData),
-            'hora': _formatTime(novoHorario),
-            'status': 'reagendado',
-          })
-          .eq('id', agendamentoId);
-    } catch (e) {
-      debugPrint('Erro ao atualizar horário: $e');
-      throw Exception('Falha ao atualizar horário.');
-    }
-  }
-
-  String _formatDate(DateTime d) =>
-      DateTime(d.year, d.month, d.day).toIso8601String().substring(0, 10);
+  /// ======================
+  /// HELPERS DE FORMATO
+  /// ======================
+  String _formatDate(DateTime d) => DateFormat('yyyy-MM-dd').format(d);
 
   String _formatTime(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';

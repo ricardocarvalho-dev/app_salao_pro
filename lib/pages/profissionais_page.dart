@@ -36,7 +36,6 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
           .select('id, nome')
           .order('nome');
 
-      // Converte para tipos estáveis (String) — importante no Web
       final especialidadesMap = (espResponse as List<dynamic>)
           .map((e) => {
                 'id': (e['id'] as dynamic).toString(),
@@ -57,19 +56,21 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
     }
   }
 
-
   Future<void> mostrarFormulario({ProfissionalModel? profissional}) async {
     final nomeController = TextEditingController(text: profissional?.nome ?? '');
-    List<String> especialidadesSelecionadas = profissional?.especialidadeIds ?? [];
+    List<String> especialidadesSelecionadas = [];
     String modoAgendamentoSelecionado = profissional?.modoAgendamento ?? 'por_profissional';
+
+    if (profissional != null) {
+      final profCompleto = await service.buscarPorId(profissional.id);
+      especialidadesSelecionadas = profCompleto.especialidadeIds;
+    }
 
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          profissional == null ? 'Novo Profissional' : 'Editar Profissional',
-        ),
+        title: Text(profissional == null ? 'Novo Profissional' : 'Editar Profissional'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -93,7 +94,11 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
               const SizedBox(height: 12),
               MultiSelectDialogField<String>(
                 items: especialidades
-                    .map((esp) => MultiSelectItem<String>( (esp['id'] as dynamic).toString(), (esp['nome'] as dynamic).toString(),)).toList(),
+                    .map((esp) => MultiSelectItem<String>(
+                          (esp['id'] as dynamic).toString(),
+                          (esp['nome'] as dynamic).toString(),
+                        ))
+                    .toList(),
                 initialValue: especialidadesSelecionadas,
                 title: const Text("Especialidades"),
                 buttonText: const Text("Selecione especialidades"),

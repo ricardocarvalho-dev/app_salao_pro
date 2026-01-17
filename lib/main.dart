@@ -13,6 +13,7 @@ import 'theme/theme_notifier.dart';
 import 'package:app_salao_pro/theme/tema_salao_pro.dart';
 import 'package:app_salao_pro/deep_link_handler.dart';
 import 'package:app_salao_pro/theme/horario_theme.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final navigatorKey = GlobalKey<NavigatorState>();
 
@@ -44,13 +45,23 @@ Future<void> main() async {
   );
 
   await initializeDateFormatting('pt_BR', null);
-
+  /*
   runApp(
     myProvider.ChangeNotifierProvider(
       create: (_) => ThemeNotifier(),
       child: const MyApp(),
     ),
   );
+  */
+  runApp(
+    ProviderScope(
+      child: myProvider.ChangeNotifierProvider(
+        create: (_) => ThemeNotifier(),
+        child: const MyApp(),
+      ),
+    ),
+  );
+
 }
 
 class MyApp extends StatefulWidget {

@@ -41,9 +41,9 @@ class ProfissionalModel {
 
   factory ProfissionalModel.fromMap(Map<String, dynamic> map) {
     return ProfissionalModel(
-      id: map['id'] ?? '',
-      nome: map['nome'] ?? '',
-      salaoId: map['salao_id'] ?? '',
+      id: map['id']?.toString() ?? '',
+      nome: map['nome']?.toString() ?? '',
+      salaoId: map['salao_id']?.toString() ?? '',
       especialidadeIds: (map['especialidade_ids'] as List<dynamic>? ?? [])
           .map((e) => e.toString())
           .toList(),
@@ -52,7 +52,7 @@ class ProfissionalModel {
               .map((e) => e.toString())
               .toList()
           : null,
-      modoAgendamento: map['modo_agendamento'] ?? 'por_profissional',
+      modoAgendamento: map['modo_agendamento']?.toString() ?? 'por_profissional',
     );
   }
 
@@ -61,6 +61,8 @@ class ProfissionalModel {
       'id': id,
       'nome': nome,
       'salao_id': salaoId,
+      // ⚠️ Se já estiver usando a tabela de junção profissional_especialidades,
+      // esse campo pode ser ignorado na persistência e usado apenas internamente.
       'especialidade_ids': especialidadeIds,
       'modo_agendamento': modoAgendamento,
     };
