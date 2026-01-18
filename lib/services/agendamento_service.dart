@@ -199,4 +199,63 @@ class AgendamentoService {
 
   String _formatTime(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  /// ======================
+  /// GERAR SLOTS PREVIEW (D+30)
+  /// ======================
+  Future<List<Map<String, dynamic>>> gerarSlotsPreview({
+    required String servicoId,
+    required DateTime data,
+    String? profissionalId,
+  }) async {
+    try {
+      final response = await _supabase.rpc(
+        'gerar_slots_preview',
+        params: {
+          'p_salao_id': salaoId,
+          'p_servico_id': servicoId,
+          'p_profissional_id':
+              (profissionalId != null && profissionalId.isNotEmpty)
+                  ? profissionalId
+                  : null,
+          'p_data': _formatDate(data),
+        },
+      );
+
+      if (response == null || response is! List) {
+        return [];
+      }
+
+      final now = DateTime.now();
+
+      return response.map<Map<String, dynamic>>((row) {
+        final timeStr =
+            (row['horario'] ?? row['hora']).toString(); // defensivo
+        final partes = timeStr.split(':');
+
+        final hora =
+            '${partes[0].padLeft(2, '0')}:${partes[1].padLeft(2, '0')}';
+
+        final dtSlot = DateTime(
+          data.year,
+          data.month,
+          data.day,
+          int.parse(partes[0]),
+          int.parse(partes[1]),
+        );
+
+        return {
+          'hora': hora,
+          'ocupado': row['ocupado'] == true,
+          'passado': dtSlot.isBefore(now),
+        };
+      }).toList()
+        ..sort((a, b) =>
+            (a['hora'] as String).compareTo(b['hora'] as String));
+    } catch (e) {
+      debugPrint('Erro ao gerar slots preview: $e');
+      return [];
+    }
+  }
+
 }

@@ -97,69 +97,96 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
   }
 
   // ✅ Função Corrigida com Parâmetros Forçados
-  Future<void> carregarHorarios({String? profissionalIdForcado, String? servicoIdForcado}) async {
+  Future<void> carregarHorarios({
+    String? profissionalIdForcado,
+    String? servicoIdForcado,
+  }) async {
     final state = ref.read(agendamentoProvider);
-    
-    // Prioriza o ID que acabou de ser clicado no dropdown
+
     final sId = servicoIdForcado ?? state.servicoSelecionado;
-    final pId = profissionalIdForcado ?? state.profissionalSelecionado;
     final data = state.dataSelecionada;
 
     if (sId == null || data == null) return;
 
-    final supabase = Supabase.instance.client;
+    // 🔐 Regra de modo de agendamento
+    final profissionalValido =
+        widget.modoAgendamento == 'por_profissional'
+            ? (profissionalIdForcado ?? state.profissionalSelecionado)
+            : null;
+
+    final acimaD30 =
+        data.isAfter(DateTime.now().add(const Duration(days: 30)));
+
     if (mounted) setState(() => buscandoSlots = true);
 
     try {
-      debugPrint('--- Iniciando Busca de Horários ---');
-      debugPrint('Serviço: $sId');
-      debugPrint('Profissional: $pId');
-      debugPrint('Data: ${DateFormat('yyyy-MM-dd').format(data)}');
+      List<HorarioSlot> slots = [];
 
-      var query = supabase
-          .from('horarios_disponiveis')
-          .select()
-          .eq('servico_id', sId)
-          .eq('data', DateFormat('yyyy-MM-dd').format(data))
-          .eq('status', 'ativo');
+      if (acimaD30) {
+        // ==========================
+        // 🔵 PREVIEW (D+30+)
+        // ==========================
+        final preview = await agendamentoService.gerarSlotsPreview(
+          servicoId: sId,
+          data: data,
+          profissionalId: profissionalValido,
+        );
 
-      // ✅ Filtro de Profissional (Joane Franco e outros)
-      if (pId != null && pId.isNotEmpty) {
-        query = query.eq('profissional_id', pId);
+        slots = preview.map((row) {
+          return HorarioSlot(
+            id: 'preview_${row['hora']}',
+            hora: row['hora'],
+            ocupado: row['ocupado'] == true,
+            passado: row['passado'] == true,
+          );
+        }).toList();
       } else {
-        query = query.is_('profissional_id', null);
+        // ==========================
+        // 🟢 GRADE REAL (≤ D+30)
+        // ==========================
+        final supabase = Supabase.instance.client;
+
+        var query = supabase
+            .from('horarios_disponiveis')
+            .select()
+            .eq('servico_id', sId)
+            .eq('data', DateFormat('yyyy-MM-dd').format(data))
+            .eq('status', 'ativo');
+
+        if (profissionalValido != null && profissionalValido.isNotEmpty) {
+          query = query.eq('profissional_id', profissionalValido);
+        } else {
+          query = query.is_('profissional_id', null);
+        }
+
+        final resp = await query;
+        final now = DateTime.now();
+
+        slots = List<Map<String, dynamic>>.from(resp).map((h) {
+          final partes = h['horario'].toString().split(':');
+
+          final dt = DateTime(
+            data.year,
+            data.month,
+            data.day,
+            int.parse(partes[0]),
+            int.parse(partes[1]),
+          );
+
+          return HorarioSlot(
+            id: h['id'].toString(),
+            hora:
+                '${partes[0].padLeft(2, '0')}:${partes[1].padLeft(2, '0')}',
+            ocupado: h['ocupado'] == true,
+            passado: dt.isBefore(now),
+          );
+        }).toList();
       }
-
-      final resp = await query;
-      debugPrint('Resposta do Banco: ${resp.length} slots encontrados.');
-
-      final List<Map<String, dynamic>> horariosRaw = List<Map<String, dynamic>>.from(resp ?? []);
-      final now = DateTime.now();
-
-      List<HorarioSlot> slots = horariosRaw.map((h) {
-        final horaStr = h['horario'].toString();
-        final partes = horaStr.split(':');
-        final dt = DateTime(
-          data.year,
-          data.month,
-          data.day,
-          int.parse(partes[0]),
-          int.parse(partes[1]),
-        );
-
-        return HorarioSlot(
-          id: h['id'].toString(),
-          hora: horaStr.length > 5 ? horaStr.substring(0, 5) : horaStr,
-          ocupado: h['ocupado'] == true,
-          passado: dt.isBefore(now),
-        );
-      }).toList();
 
       slots.sort((a, b) => a.hora.compareTo(b.hora));
       ref.read(agendamentoProvider.notifier).setHorariosDisponiveis(slots);
-
     } catch (e) {
-      debugPrint('Erro Crítico ao carregar horários: $e');
+      debugPrint('Erro ao carregar horários: $e');
       ref.read(agendamentoProvider.notifier).setHorariosDisponiveis([]);
     } finally {
       if (mounted) setState(() => buscandoSlots = false);
