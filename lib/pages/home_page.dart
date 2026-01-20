@@ -10,11 +10,6 @@ import 'login_page.dart';
 import 'editar_salao_page.dart';
 import 'perfil_page.dart';
 import 'package:app_salao_pro/widgets/theme_selector.dart';
-//import 'pages/clientes_page.dart';
-//import 'pages/profissionais_page.dart';
-//import 'pages/servicos_page.dart';
-//import 'pages/agenda_page.dart';
-
 
 class HomePage extends StatefulWidget {
   final String salaoId;
@@ -25,47 +20,96 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   bool isDono = false;
   String nomeSalao = '';
   String? emailDono;
   String? logoUrl;
 
-  bool carregando = true; // Garante que nada é exibido antes da hora
-  bool erro = false; // Evita travamento silencioso
+  bool carregando = true;
+  bool erro = false;
+  
+  // 🛡️ Trava de segurança para evitar múltiplas chamadas simultâneas
+  bool _estaCarregandoProcesso = false;
 
   @override
   void initState() {
     super.initState();
-    _validarAcesso();
+    WidgetsBinding.instance.addObserver(this);
+    _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// 🔁 Reage quando o app volta do background (Resolve o travamento ao retornar)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('🔄 Home retomada do segundo plano - Validando estado...');
+      _load();
+    }
+  }
+
+  /// 🔐 Load protegido contra travamento, timeout e estresse de cliques
+  Future<void> _load() async {
+    // Se já estiver carregando ou o widget saiu da tela, ignora a nova chamada
+    if (_estaCarregandoProcesso || !mounted) return;
+
+    setState(() {
+      _estaCarregandoProcesso = true;
+      carregando = true;
+      erro = false;
+    });
+
+    try {
+      // Tenta executar a validação, mas aborta se demorar mais de 10 segundos
+      await Future.any([
+        _validarAcesso(),
+        Future.delayed(
+          const Duration(seconds: 10),
+          () => throw Exception('Timeout na conexão com o servidor'),
+        ),
+      ]);
+
+      if (!mounted) return;
+      setState(() => carregando = false);
+    } catch (e) {
+      debugPrint('Erro no load da Home: $e');
+
+      if (!mounted) return;
+      setState(() {
+        carregando = false;
+        erro = true;
+      });
+    } finally {
+      // Garante que a trava seja liberada para futuras tentativas
+      if (mounted) {
+        _estaCarregandoProcesso = false;
+      }
+    }
   }
 
   Future<void> _validarAcesso() async {
-    try {
-      final client = Supabase.instance.client;
-
-      // Verifica usuário
-      final user = client.auth.currentUser;
-      if (user == null || widget.salaoId.isEmpty) {
-        _voltarParaLogin();
-        return;
-      }
-
-      // Carrega permissões e dados
-      await verificarPermissao();
-      await carregarDadosSalao();
-
-    } catch (e) {
-      print("Erro ao validar acesso: $e");
-      erro = true;
-    } finally {
-      if (mounted) setState(() => carregando = false);
+    final client = Supabase.instance.client;
+    final user = client.auth.currentUser;
+    
+    // Se o usuário perdeu a sessão enquanto estava em background
+    if (user == null || widget.salaoId.isEmpty) {
+      _voltarParaLogin();
+      throw Exception('Sessão inválida ou expirada');
     }
+
+    await verificarPermissao();
+    await carregarDadosSalao();
   }
 
   Future<void> verificarPermissao() async {
     final userId = Supabase.instance.client.auth.currentUser?.id;
-    if (userId == null) return;
+    if (userId == null) throw Exception('Usuário inválido');
 
     final perfil = await Supabase.instance.client
         .from('profiles')
@@ -88,8 +132,7 @@ class _HomePageState extends State<HomePage> {
         .maybeSingle();
 
     if (response == null) {
-      erro = true;
-      return;
+      throw Exception('Salão não encontrado');
     }
 
     if (!mounted) return;
@@ -113,6 +156,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _voltarParaLogin() {
+    if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Navigator.pushReplacement(
         context,
@@ -124,7 +168,7 @@ class _HomePageState extends State<HomePage> {
   String _iniciaisSalao(String nome) {
     if (nome.trim().isEmpty) return '?';
     final partes = nome.trim().split(' ');
-    if (partes.length == 1) return partes.first.substring(0, 1).toUpperCase();
+    if (partes.length == 1) return partes.first[0].toUpperCase();
     return (partes[0][0] + partes[1][0]).toUpperCase();
   }
 
@@ -132,35 +176,61 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     final t = Theme.of(context);
 
+    // ESTADO: CARREGANDO
     if (carregando) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (erro) {
-      return Scaffold(
         body: Center(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.error, size: 60, color: Colors.red),
-              const SizedBox(height: 16),
-              const Text(
-                "Erro ao carregar o salão.\nFaça login novamente.",
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => logout(context),
-                child: const Text("Ir para Login"),
-              ),
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text("Sincronizando dados..."),
             ],
           ),
         ),
       );
     }
 
+    // ESTADO: ERRO (Evita que o app precise ser reinstalado)
+    if (erro) {
+      return Scaffold(
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.cloud_off, size: 80, color: Colors.orange),
+                const SizedBox(height: 16),
+                const Text(
+                  "Não conseguimos conectar ao servidor.",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Isso pode acontecer por instabilidade na rede ao retornar ao aplicativo.",
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: _load,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text("Tentar novamente"),
+                ),
+                TextButton(
+                  onPressed: () => logout(context),
+                  child: const Text("Sair e fazer login novamente"),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // ESTADO: PRONTO
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -202,12 +272,13 @@ class _HomePageState extends State<HomePage> {
                   Text(
                     nomeSalao,
                     textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: t.textTheme.titleLarge?.copyWith(
                       color: t.colorScheme.onPrimary,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 8),
                   if (emailDono != null)
                     Text(
                       emailDono!,
@@ -233,10 +304,9 @@ class _HomePageState extends State<HomePage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) =>
-                        EditarSalaoPage(salaoId: widget.salaoId),
+                    builder: (_) => EditarSalaoPage(salaoId: widget.salaoId),
                   ),
-                ).then((_) => carregarDadosSalao());
+                ).then((_) => _load());
               },
             ),
             ListTile(
@@ -296,7 +366,9 @@ class _HomePageState extends State<HomePage> {
           _botaoNavegacao('Clientes', () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => ClientesPage(salaoId: widget.salaoId)),
+              MaterialPageRoute(
+                builder: (_) => ClientesPage(salaoId: widget.salaoId),
+              ),
             );
           }),
           _botaoNavegacao('Agenda', () {

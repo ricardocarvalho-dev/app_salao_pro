@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_links/app_links.dart';
 import '../deep_link_handler.dart';
+import 'package:app_salao_pro/pages/home_page.dart'; // Import necessário para o Navigator
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -13,68 +14,104 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen> {
   bool _isNavigated = false;
-  bool _aguardandoDeepLink = false;
 
   @override
   void initState() {
     super.initState();
-
-    if (!kIsWeb) {
-      DeepLinkHandler.init();
-      _checkInitialDeepLink();
-    }
-
-    _setupAuthListener();
-
-    // Fallback caso nada aconteça em 1.5s
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (!mounted || _isNavigated || _aguardandoDeepLink) return;
-
-      final session = Supabase.instance.client.auth.currentSession;
-      if (session != null) {
-        _navigateToHome(session);
-      } else {
-        _navigateToLogin();
-      }
-    });
+    _inicializarApp();
   }
 
-  Future<void> _checkInitialDeepLink() async {
+  Future<void> _inicializarApp() async {
+    // 1. Inicia DeepLinks se não for Web
+    if (!kIsWeb) {
+      DeepLinkHandler.init();
+      final linkInicial = await _checkInitialDeepLink();
+      if (linkInicial) return; // Se navegou por DeepLink, para aqui
+    }
+
+    // 2. O WATCHDOG: Teste real de integridade do Supabase
+    await _verificarIntegridadeESessao();
+  }
+
+  Future<void> _verificarIntegridadeESessao() async {
+    final client = Supabase.instance.client;
+    final session = client.auth.currentSession;
+
+    if (session == null) {
+      _navigateToLogin();
+      return;
+    }
+
+    try {
+      debugPrint('🛡️ Watchdog: Testando conexão com Supabase...');
+      
+      // Tenta uma busca ultra leve com timeout de 5 segundos
+      // Isso valida se o "Client" está vivo ou se está em estado zumbi
+      await client
+          .from('profiles')
+          .select('id')
+          .limit(1)
+          .maybeSingle()
+          .timeout(const Duration(seconds: 5));
+
+      debugPrint('✅ Watchdog: Conexão íntegra.');
+      _navigateToHome(session);
+      
+    } catch (e) {
+      // 🔥 O PONTO CRÍTICO: Se cair aqui, o Supabase está travado/zumbi
+      debugPrint('🚨 Watchdog: Erro de integridade detectado: $e');
+      
+      // Forçamos o logout para limpar o cache corrompido que impede o app de abrir
+      try {
+        await client.auth.signOut();
+      } catch (_) {}
+
+      _navigateToLogin();
+    }
+  }
+
+  Future<bool> _checkInitialDeepLink() async {
     try {
       final initialLink = await AppLinks().getInitialAppLink();
       if (initialLink != null) {
         debugPrint('Deep link inicial detectado: $initialLink');
-        _aguardandoDeepLink = true;
-
-        // Processa o link e navega direto para redefinição
         await DeepLinkHandler.handleInitialLink(initialLink.toString());
         if (mounted) {
           Navigator.of(context).pushReplacementNamed('/redefinir-senha');
           _isNavigated = true;
+          return true;
         }
       }
     } catch (e) {
       debugPrint('Erro ao verificar deep link inicial: $e');
     }
+    return false;
   }
 
-  void _setupAuthListener() {
-    Supabase.instance.client.auth.onAuthStateChange.listen((event) {
-      final session = event.session;
-      if (session != null && !_isNavigated) {
-        _navigateToHome(session);
-      }
-    });
-  }
-
-  void _navigateToHome(Session session) {
-    if (!mounted) return;
+  void _navigateToHome(Session session) async {
+    if (!mounted || _isNavigated) return;
     _isNavigated = true;
-    Navigator.of(context).pushReplacementNamed('/home');
+
+    // Buscamos o salaoId do metadado do usuário ou perfil
+    // Ajuste conforme onde você guarda o salaoId no seu login
+    final userId = session.user.id;
+    final perfil = await Supabase.instance.client
+        .from('profiles')
+        .select('salao_id')
+        .eq('id', userId)
+        .maybeSingle();
+
+    final salaoId = perfil?['salao_id'] ?? '';
+
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => HomePage(salaoId: salaoId)),
+      );
+    }
   }
 
   void _navigateToLogin() {
-    if (!mounted) return;
+    if (!mounted || _isNavigated) return;
     _isNavigated = true;
     Navigator.of(context).pushReplacementNamed('/login');
   }
@@ -82,7 +119,17 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 20),
+            Text("Verificando conexão...", 
+                 style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      ),
     );
   }
 }

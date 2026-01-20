@@ -11,7 +11,6 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:provider/provider.dart' as myProvider;
 import 'theme/theme_notifier.dart';
 import 'package:app_salao_pro/theme/tema_salao_pro.dart';
-import 'package:app_salao_pro/deep_link_handler.dart';
 import 'package:app_salao_pro/theme/horario_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -20,7 +19,7 @@ final navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ Garante que o .env está incluído no pubspec.yaml
+  // ✅ Carregamento do .env
   if (!kIsWeb) {
     try {
       await dotenv.load(fileName: 'assets/.env');
@@ -29,8 +28,10 @@ Future<void> main() async {
     }
   }
 
-  // ✅ Valida variáveis antes de inicializar Supabase
-  final supabaseUrl = kIsWeb ? 'https://xwbabsvbcwlqfgcnmxtj.supabase.co' : dotenv.env['SUPABASE_URL'];
+  // ✅ Busca das credenciais
+  final supabaseUrl = kIsWeb 
+      ? 'https://xwbabsvbcwlqfgcnmxtj.supabase.co' 
+      : dotenv.env['SUPABASE_URL'];
   final supabaseKey = kIsWeb
       ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh3YmFic3ZiY3dscWZnY25teHRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1MTY1NjMsImV4cCI6MjA3MzA5MjU2M30.ENSnMxK61X0jXuqyftmlw51p3K7pd_ON7eBDZppPY0U'
       : dotenv.env['SUPABASE_ANON_KEY'];
@@ -39,20 +40,14 @@ Future<void> main() async {
     throw Exception('SUPABASE_URL ou SUPABASE_ANON_KEY não encontrados');
   }
 
+  // ✅ Inicialização simplificada (Removemos o authOptions que deu erro)
   await Supabase.initialize(
     url: supabaseUrl,
     anonKey: supabaseKey,
   );
 
   await initializeDateFormatting('pt_BR', null);
-  /*
-  runApp(
-    myProvider.ChangeNotifierProvider(
-      create: (_) => ThemeNotifier(),
-      child: const MyApp(),
-    ),
-  );
-  */
+
   runApp(
     ProviderScope(
       child: myProvider.ChangeNotifierProvider(
@@ -61,7 +56,6 @@ Future<void> main() async {
       ),
     ),
   );
-
 }
 
 class MyApp extends StatefulWidget {
@@ -73,28 +67,6 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        DeepLinkHandler.init();
-      } catch (e, s) {
-        debugPrint('Erro ao inicializar DeepLinkHandler: $e\n$s');
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    try {
-      DeepLinkHandler.dispose();
-    } catch (e) {
-      debugPrint('Erro ao liberar DeepLinkHandler: $e');
-    }
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final themeNotifier = myProvider.Provider.of<ThemeNotifier>(context);
 
@@ -105,9 +77,11 @@ class _MyAppState extends State<MyApp> {
       darkTheme: temaSalaoProDark,
       themeMode: themeNotifier.themeMode,
       debugShowCheckedModeBanner: false,
+      // ✅ Definindo as rotas necessárias
       routes: {
         '/login': (_) => const LoginPage(),
         '/redefinir-senha': (_) => const RedefinirSenhaPage(),
+        // A rota '/' ou home será o SplashScreen definido abaixo
       },
       home: const SplashScreen(),
     );
