@@ -97,6 +97,7 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
   }
 
   // ✅ Função Corrigida com Parâmetros Forçados
+  /*
   Future<void> carregarHorarios({
     String? profissionalIdForcado,
     String? servicoIdForcado,
@@ -188,6 +189,73 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
     } catch (e) {
       debugPrint('Erro ao carregar horários: $e');
       ref.read(agendamentoProvider.notifier).setHorariosDisponiveis([]);
+    } finally {
+      if (mounted) setState(() => buscandoSlots = false);
+    }
+  }
+  */
+  Future<void> carregarHorarios({
+    String? profissionalIdForcado,
+    String? servicoIdForcado,
+  }) async {
+    final state = ref.read(agendamentoProvider);
+
+    // Definimos os IDs prioritários (parâmetros ou estado)
+    final sId = servicoIdForcado ?? state.servicoSelecionado;
+    final data = state.dataSelecionada;
+    
+    // 🎯 IMPORTANTE: Aqui garantimos que o filtro siga a seleção do Dropdown
+    final profissionalValido = (profissionalIdForcado != null) 
+        ? profissionalIdForcado 
+        : state.profissionalSelecionado;
+
+    if (sId == null || data == null) return;
+
+    if (mounted) setState(() => buscandoSlots = true);
+
+    try {
+      // Limpamos para garantir que a UI não mostre dados "sujos"
+      ref.read(agendamentoProvider.notifier).setHorariosDisponiveis([]);
+
+      final supabase = Supabase.instance.client;
+      
+      var query = supabase
+          .from('horarios_disponiveis')
+          .select()
+          .eq('servico_id', sId)
+          .eq('data', DateFormat('yyyy-MM-dd').format(data))
+          .eq('status', 'ativo');
+
+      // 🔥 FILTRO ESTRITO PARA CADA CASO
+      if (profissionalValido != null && profissionalValido.isNotEmpty) {
+        // Se tem profissional selecionado (vindo do Dropdown ou do initState)
+        // Buscamos APENAS a agenda dele.
+        query = query.eq('profissional_id', profissionalValido);
+      } else {
+        // Se for "Todos" ou nenhum selecionado, buscamos apenas a grade geral
+        query = query.is_('profissional_id', null);
+      }
+
+      final resp = await query;
+      final now = DateTime.now();
+
+      final List<HorarioSlot> slots = List<Map<String, dynamic>>.from(resp).map((h) {
+        final partes = h['horario'].toString().split(':');
+        final dtSlot = DateTime(data.year, data.month, data.day, int.parse(partes[0]), int.parse(partes[1]));
+
+        return HorarioSlot(
+          id: h['id'].toString(),
+          hora: '${partes[0].padLeft(2, '0')}:${partes[1].padLeft(2, '0')}',
+          ocupado: h['ocupado'] == true,
+          passado: dtSlot.isBefore(now),
+        );
+      }).toList();
+
+      slots.sort((a, b) => a.hora.compareTo(b.hora));
+      ref.read(agendamentoProvider.notifier).setHorariosDisponiveis(slots);
+
+    } catch (e) {
+      debugPrint('Erro ao carregar horários: $e');
     } finally {
       if (mounted) setState(() => buscandoSlots = false);
     }
