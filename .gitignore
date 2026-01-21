@@ -49,3 +49,6 @@ app.*.map.json
 
 # Git commit template (local only)
 .gitmessage.txt
+
+# Segurança - arquivos de configuração sensíveis
+assets/.env
