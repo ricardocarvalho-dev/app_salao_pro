@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
-import '../providers/agendamento_provider.dart'; // para usar HorarioSlot
+import '../providers/agendamento_provider.dart'; // HorarioSlot
+import '../theme/horario_theme.dart';
 
 class HorariosSeguro extends StatelessWidget {
-  final List<HorarioSlot> horarios;          // agora tipado corretamente
+  final List<HorarioSlot> horarios;
   final String? selecionado;
   final bool carregando;
   final bool buscaIniciada;
   final void Function(String?) onSelecionar;
-  final dynamic theme; // mesmo hTheme que você já usa
+  final HorarioTheme theme;
 
   const HorariosSeguro({
     super.key,
@@ -21,7 +22,7 @@ class HorariosSeguro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 🔒 valida seleção
+    // 🔒 garante que a seleção ainda existe na lista atual
     final selecaoValida =
         selecionado != null && horarios.any((h) => h.hora == selecionado);
 
@@ -41,7 +42,9 @@ class HorariosSeguro extends StatelessWidget {
       );
     }
 
-    if (horarios.isEmpty) return const SizedBox.shrink();
+    if (horarios.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Wrap(
       spacing: 8,

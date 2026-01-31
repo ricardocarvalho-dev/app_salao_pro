@@ -11,13 +11,15 @@ class ClienteService {
         .from('clientes')
         .select()
         .eq('salao_id', salaoId)
-        .order('nome')
-        .execute();
+        .order('nome');
 
-    final data = response.data as List;
+    final data = response as List;
     return data.map((item) => ClienteModel.fromMap(item)).toList();
   }
 
+  /// ===============================
+  /// ADICIONAR (SEM RETORNO – já existia)
+  /// ===============================
   Future<void> adicionar(ClienteModel cliente) async {
     _validarCliente(cliente);
     await _verificarDuplicidade(cliente: cliente, isAtualizacao: false);
@@ -27,7 +29,28 @@ class ClienteService {
       'celular': cliente.celular,
       'email': cliente.email.isNotEmpty ? cliente.email : null,
       'salao_id': cliente.salaoId,
-    }).execute();
+    });
+  }
+
+  /// ===============================
+  /// ✅ ADICIONAR RETORNANDO ID (NOVO)
+  /// ===============================
+  Future<String> adicionarRetornandoId(ClienteModel cliente) async {
+    _validarCliente(cliente);
+    await _verificarDuplicidade(cliente: cliente, isAtualizacao: false);
+
+    final response = await supabase
+        .from('clientes')
+        .insert({
+          'nome': cliente.nome,
+          'celular': cliente.celular,
+          'email': cliente.email.isNotEmpty ? cliente.email : null,
+          'salao_id': cliente.salaoId,
+        })
+        .select('id')
+        .single();
+
+    return response['id'].toString();
   }
 
   Future<void> atualizar(ClienteModel cliente) async {
@@ -38,13 +61,16 @@ class ClienteService {
       'nome': cliente.nome,
       'celular': cliente.celular,
       'email': cliente.email.isNotEmpty ? cliente.email : null,
-    }).eq('id', cliente.id).execute();
+    }).eq('id', cliente.id);
   }
 
   Future<void> excluir(String id) async {
-    await supabase.from('clientes').delete().eq('id', id).execute();
+    await supabase.from('clientes').delete().eq('id', id);
   }
 
+  // ===============================
+  // VALIDACOES
+  // ===============================
   void _validarCliente(ClienteModel cliente) {
     if (cliente.nome.trim().isEmpty) {
       throw Exception('Nome é obrigatório');
@@ -52,6 +78,9 @@ class ClienteService {
     if (cliente.celular.trim().isEmpty) {
       throw Exception('Celular é obrigatório');
     }
+    if (!_celularValido(cliente.celular)) {
+      throw Exception('Celular inválido. Informe DDD + número');
+    }    
     if (cliente.email.isNotEmpty && !_emailRegex.hasMatch(cliente.email)) {
       throw Exception('E-mail inválido');
     }
@@ -64,15 +93,13 @@ class ClienteService {
     required ClienteModel cliente,
     required bool isAtualizacao,
   }) async {
-    // Verificar celular duplicado
     final celularResponse = await supabase
         .from('clientes')
         .select('id')
         .eq('salao_id', cliente.salaoId)
-        .eq('celular', cliente.celular)
-        .execute();
+        .eq('celular', cliente.celular);
 
-    final celularData = celularResponse.data as List;
+    final celularData = celularResponse as List;
 
     if (isAtualizacao) {
       if (celularData.any((item) => item['id'] != cliente.id)) {
@@ -84,16 +111,14 @@ class ClienteService {
       }
     }
 
-    // Verificar e-mail duplicado (se houver)
     if (cliente.email.isNotEmpty) {
       final emailResponse = await supabase
           .from('clientes')
           .select('id')
           .eq('salao_id', cliente.salaoId)
-          .eq('email', cliente.email)
-          .execute();
+          .eq('email', cliente.email);
 
-      final emailData = emailResponse.data as List;
+      final emailData = emailResponse as List;
 
       if (isAtualizacao) {
         if (emailData.any((item) => item['id'] != cliente.id)) {
@@ -106,4 +131,10 @@ class ClienteService {
       }
     }
   }
+
+  bool _celularValido(String celular) {
+    final numeros = celular.replaceAll(RegExp(r'\D'), '');
+    return numeros.length == 11;
+  }
+
 }

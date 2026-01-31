@@ -8,7 +8,8 @@ class DropdownSeguro<T> extends StatelessWidget {
   final String labelText;
   final String hintText;
   final bool enabled;
-  final bool mostrarOpcaoVazia; // ✅ Novo parâmetro
+  final bool mostrarOpcaoVazia;
+  final String textoOpcaoVazia;
   final void Function(String?)? onChanged;
 
   const DropdownSeguro({
@@ -20,40 +21,58 @@ class DropdownSeguro<T> extends StatelessWidget {
     this.hintText = 'Selecione',
     this.value,
     this.enabled = true,
-    this.mostrarOpcaoVazia = false, // ✅ Padrão é falso para não afetar os outros
+    this.mostrarOpcaoVazia = false,
+    this.textoOpcaoVazia = 'Sem seleção',
     this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Remove duplicados pelo ID
     final itensUnicos = {
-      for (var item in items) getId(item): item
+      for (final item in items) getId(item): item,
     }.values.toList();
 
-    final valueValido =
-        value != null && itensUnicos.any((i) => getId(i) == value);
+    // Verifica se o value atual existe nos itens
+    final valueValido = value != null &&
+        itensUnicos.any((item) => getId(item) == value);
 
-    return DropdownButtonFormField<String>(
+    final List<DropdownMenuItem<String?>> dropdownItems = [];
+
+    // 🔹 OPÇÃO NULA REAL (CRÍTICA)
+    if (mostrarOpcaoVazia) {
+      dropdownItems.add(
+        DropdownMenuItem<String?>(
+          value: null,
+          child: Text(
+            textoOpcaoVazia,
+            style: TextStyle(
+              color: Theme.of(context).hintColor,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 🔹 ITENS NORMAIS
+    dropdownItems.addAll(
+      itensUnicos.map(
+        (item) => DropdownMenuItem<String?>(
+          value: getId(item),
+          child: Text(getLabel(item)),
+        ),
+      ),
+    );
+
+    return DropdownButtonFormField<String?>(
+      isExpanded: true,
       value: valueValido ? value : null,
       hint: Text(hintText),
       decoration: InputDecoration(
         labelText: labelText,
-        // ... seus estilos de decoração permanecem iguais
       ),
-      items: [
-        // ✅ Só adiciona o item nulo se você pedir explicitamente
-        if (mostrarOpcaoVazia)
-          DropdownMenuItem<String>(
-            value: null,
-            child: Text(hintText),
-          ),
-        ...itensUnicos.map(
-          (item) => DropdownMenuItem<String>(
-            value: getId(item),
-            child: Text(getLabel(item)),
-          ),
-        ),
-      ],
+      items: dropdownItems,
       onChanged: enabled ? onChanged : null,
     );
   }
