@@ -100,6 +100,34 @@ class AgendamentoService {
   }
 
   /// ======================
+  /// ADICIONAR AGENDAMENTO FORA DA GRADE D+30
+  /// ======================
+  Future<void> criarForaDaGrade({
+    required String servicoId,
+    String? profissionalId,
+    required DateTime data,
+    required String horario,
+    required String clienteId,
+  }) async {
+    try {
+      await _supabase.rpc(
+        'criar_agendamento_fora_grade_validado',
+        params: {
+          'p_servico_id': servicoId,
+          'p_profissional_id': profissionalId,
+          'p_data': _formatDate(data),
+          'p_horario': horario,
+          'p_cliente_id': clienteId,
+          'p_usuario_id': salaoId,
+        },
+      );
+    } catch (e) {
+      debugPrint('Erro ao criar agendamento fora da grade: $e');
+      rethrow;
+    }
+  }
+
+  /// ======================
   /// EXCLUIR AGENDAMENTO
   /// ======================
   Future<void> excluir(String agendamentoId, WidgetRef ref) async {
