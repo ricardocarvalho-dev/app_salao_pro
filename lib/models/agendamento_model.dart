@@ -73,39 +73,25 @@ class AgendamentoModel {
   /// 🔹 Usado para leitura (Agenda / JOIN)
   factory AgendamentoModel.fromMap(Map<String, dynamic> map) {
     final partesHora = (map['hora'] as String).split(':');
-    final hora = TimeOfDay(
-      hour: int.parse(partesHora[0]),
-      minute: int.parse(partesHora[1]),
-    );
-
-    // 🔹 Detecta JOIN ou modelo antigo
-    final cliente = map['cliente'];
-    final servico = map['servico'];
-    final profissional = map['profissional'];
 
     return AgendamentoModel(
       id: map['id']?.toString() ?? '',
-      salaoId: map['salao_id']?.toString() ?? '',
-
       data: DateTime.tryParse(map['data'] ?? '') ?? DateTime.now(),
-      hora: hora,
+      hora: TimeOfDay(
+        hour: int.parse(partesHora[0]),
+        minute: int.parse(partesHora[1]),
+      ),
 
-      // IDs
-      clienteId: cliente?['id']?.toString() ??
-          map['cliente_id']?.toString() ??
-          '',
-      servicoId: servico?['id']?.toString() ??
-          map['servico_id']?.toString() ??
-          '',
-      profissionalId: profissional?['id']?.toString() ??
-          map['profissional_id']?.toString(),
+      clienteId: map['cliente']?['id']?.toString() ?? '',
+      servicoId: map['servico']?['id']?.toString() ?? '',
+      profissionalId: map['profissional']?['id']?.toString(),
 
-      // Nomes (JOIN)
-      clienteNome: cliente?['nome'],
-      servicoNome: servico?['nome'],
-      profissionalNome: profissional?['nome'],
+      clienteNome: map['cliente']?['nome'],
+      servicoNome: map['servico']?['nome'],
+      profissionalNome: map['profissional']?['nome'],
 
       status: _parseStatus(map['status']),
+      salaoId: map['salao_id']?.toString() ?? '',
       createdAt:
           DateTime.tryParse(map['created_at'] ?? '') ?? DateTime.now(),
     );

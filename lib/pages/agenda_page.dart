@@ -225,7 +225,7 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
 
         final hora =
             '${ag.hora.hour.toString().padLeft(2, '0')}:${ag.hora.minute.toString().padLeft(2, '0')}';
-
+        /*
         return ListTile(
           title: Text('$hora — ${ag.clienteNome ?? 'Cliente'}'),
           subtitle: Text(
@@ -236,6 +236,21 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
             onPressed: () => excluirAgendamento(ag.id),
           ),
         );
+        */ 
+        return ListTile(
+          title: Text(
+            '$hora — ${ag.clienteNome ?? ''}',
+          ),
+          subtitle: Text(
+            '${ag.servicoNome ?? ''} • '
+            '${ag.profissionalNome != null ? ag.profissionalNome! : 'Por serviço'}',
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: () => excluirAgendamento(ag.id),
+          ),
+        );
+        
       },
     );
   }

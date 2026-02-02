@@ -120,6 +120,7 @@ class AgendamentoService {
   /// ======================
   /// BUSCAR AGENDAMENTOS
   /// ======================
+  /*
   Future<List<AgendamentoModel>> getAgendamentos(
     DateTime data, {
     String? profissionalId,
@@ -145,6 +146,48 @@ class AgendamentoService {
 
       return response
           .map((map) => AgendamentoModel.fromMap(map as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('Erro ao buscar agendamentos: $e');
+      return [];
+    }
+  }
+  */
+  Future<List<AgendamentoModel>> getAgendamentos(
+    DateTime data, {
+    String? profissionalId,
+    String? servicoId,
+  }) async {
+    try {
+      var query = _supabase
+          .from('agendamentos')
+          .select('''
+            id,
+            data,
+            hora,
+            status,
+            cliente:clientes ( id, nome ),
+            servico:servicos ( id, nome ),
+            profissional:profissionais ( id, nome )
+          ''')
+          .eq('salao_id', salaoId)
+          .eq('data', _formatDate(data))
+          .neq('status', 'cancelado');
+
+      if (profissionalId != null && profissionalId.isNotEmpty) {
+        query = query.eq('profissional_id', profissionalId);
+      }
+
+      if (servicoId != null && servicoId.isNotEmpty) {
+        query = query.eq('servico_id', servicoId);
+      }
+
+      final response = await query.order('hora');
+
+      if (response is! List) return [];
+
+      return response
+          .map((e) => AgendamentoModel.fromMap(e as Map<String, dynamic>))
           .toList();
     } catch (e) {
       debugPrint('Erro ao buscar agendamentos: $e');
