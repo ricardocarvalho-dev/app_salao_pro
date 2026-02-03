@@ -28,18 +28,24 @@ class DropdownSeguro<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Remove duplicados pelo ID
+    /// Remove duplicados pelo ID
     final itensUnicos = {
       for (final item in items) getId(item): item,
     }.values.toList();
 
-    // Verifica se o value atual existe nos itens
-    final valueValido = value != null &&
-        itensUnicos.any((item) => getId(item) == value);
+    /// Verifica se o value existe na lista
+    final bool valueValido =
+        value != null && itensUnicos.any((item) => getId(item) == value);
+
+    if (value != null && !valueValido) {
+      debugPrint(
+        '⚠️ DropdownSeguro [$labelText]: value ($value) não encontrado. Resetando para null.',
+      );
+    }
 
     final List<DropdownMenuItem<String?>> dropdownItems = [];
 
-    // 🔹 OPÇÃO NULA REAL (CRÍTICA)
+    /// Opção vazia real
     if (mostrarOpcaoVazia) {
       dropdownItems.add(
         DropdownMenuItem<String?>(
@@ -55,7 +61,7 @@ class DropdownSeguro<T> extends StatelessWidget {
       );
     }
 
-    // 🔹 ITENS NORMAIS
+    /// Itens normais
     dropdownItems.addAll(
       itensUnicos.map(
         (item) => DropdownMenuItem<String?>(

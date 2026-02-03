@@ -26,6 +26,7 @@ class AgendamentoState {
   final DateTime? dataSelecionada;
   final List<HorarioSlot> horariosDisponiveis;
   final String? horarioSelecionado;
+  final String? clienteNome; // ✅ novo campo para armazenar o nome do cliente selecionado
 
   // Novos campos
   final List<Map<String, dynamic>> profissionais;
@@ -52,6 +53,7 @@ class AgendamentoState {
     this.mapaProfissionais = const {},
     this.mapaServicos = const {},
     this.mapaClientes = const {},
+    this.clienteNome,
   });
 
   AgendamentoState copyWith({
@@ -69,6 +71,7 @@ class AgendamentoState {
     Map<String, String>? mapaProfissionais,
     Map<String, String>? mapaServicos,
     Map<String, String>? mapaClientes,
+    String? clienteNome,
   }) {
     return AgendamentoState(
       clienteId: clienteId ?? this.clienteId,
@@ -85,6 +88,7 @@ class AgendamentoState {
       mapaProfissionais: mapaProfissionais ?? this.mapaProfissionais,
       mapaServicos: mapaServicos ?? this.mapaServicos,
       mapaClientes: mapaClientes ?? this.mapaClientes,
+      clienteNome: clienteNome ?? this.clienteNome,
     );
   }
 }
@@ -172,6 +176,7 @@ class AgendamentoNotifier extends StateNotifier<AgendamentoState> {
     state = state.copyWith(clienteId: clienteId);
   }
   */
+  /*
   void selecionarCliente(String? clienteId) {
     // Criamos uma nova instância para garantir que o null seja aceito
     state = AgendamentoState(
@@ -191,7 +196,53 @@ class AgendamentoNotifier extends StateNotifier<AgendamentoState> {
       horariosDisponiveis: state.horariosDisponiveis,
       horarioSelecionado: state.horarioSelecionado,
     );
-  }  
+  } 
+  */
+  /*
+  void selecionarCliente(String? clienteId) {
+    // Verifica se o clienteId é válido e existe na lista de clientes
+    final clienteSelecionado = clienteId != null
+        ? state.clientes.firstWhere(
+            (cliente) => cliente['id'] == clienteId, 
+            orElse: () => <String, dynamic>{})  // Retorna um mapa vazio se não encontrado
+        : null;
+
+    debugPrint('Cliente selecionado: $clienteId');
+    // Atualiza somente o campo clienteId no estado
+    state = state.copyWith(
+      clienteId: clienteId,
+      // Atualiza o nome do cliente, se o clienteId for válido
+      clienteNome: clienteSelecionado != null && clienteSelecionado.isNotEmpty 
+          ? clienteSelecionado['nome']
+          : null,
+    );
+
+    debugPrint('Estado atualizado: $clienteId');
+  }
+  */
+  void selecionarCliente(String? clienteId) {
+    Map<String, dynamic>? clienteSelecionado;
+
+    if (clienteId != null) {
+      clienteSelecionado = state.clientes.firstWhere(
+        (cliente) => cliente['id'].toString() == clienteId.toString(),
+        orElse: () => {},
+      );
+    }
+
+    debugPrint('Cliente selecionado: $clienteId');
+
+    state = state.copyWith(
+      clienteId: clienteId,
+      clienteNome: clienteSelecionado != null && clienteSelecionado.isNotEmpty
+          ? clienteSelecionado['nome']?.toString()
+          : null,
+    );
+
+    debugPrint(
+      'Estado atualizado -> clienteId: ${state.clienteId}, nome: ${state.clienteNome}',
+    );
+  }
 
   // ======================
   // PROFISSIONAL

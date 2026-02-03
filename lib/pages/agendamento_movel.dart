@@ -9,6 +9,8 @@ import '../services/agendamento_service.dart' as service;
 import '../widgets/dropdown_seguro.dart';
 import '../widgets/horarios_seguro.dart';
 import '../theme/horario_theme.dart';
+import '../widgets/cliente_modal.dart';
+
 
 class AgendamentoMovelPage extends ConsumerStatefulWidget {
   final String salaoId;
@@ -36,15 +38,11 @@ class AgendamentoMovelPage extends ConsumerStatefulWidget {
 class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
   late service.AgendamentoService agendamentoService;
 
-  List<Map<String, dynamic>> clientes = [];
-  List<Map<String, dynamic>> profissionais = [];
-  List<Map<String, dynamic>> especialidades = [];
-  List<Map<String, dynamic>> servicos = [];
-
   bool carregandoDados = true;
   bool buscandoSlots = false;
 
   @override
+  /*
   void initState() {
     super.initState();
     agendamentoService = service.AgendamentoService(widget.salaoId);
@@ -57,9 +55,48 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
       }
     });
   }
+  */
+  @override
+  void initState() {
+    super.initState();
+    agendamentoService = service.AgendamentoService(widget.salaoId);
 
+    Future.microtask(() async {
+      if (!mounted) return;
+
+      ref.invalidate(agendamentoProvider);
+
+      // 1️⃣ PRIMEIRO carrega listas
+      await _carregarDadosIniciais();
+
+      // 2️⃣ DEPOIS aplica seleções iniciais
+      await _initProvider();
+    });
+  }
+
+  /*
   Future<void> _initProvider() async {
     final notifier = ref.read(agendamentoProvider.notifier);
+    notifier.setHorarioSelecionado(null);
+    notifier.setHorariosDisponiveis([]);
+    notifier.setDataSelecionada(widget.dataSelecionada);
+    notifier.selecionarCliente(widget.clienteId);
+    notifier.selecionarProfissional(widget.profissionalId);
+    notifier.selecionarServico(widget.servicoId);
+  }
+  */
+  Future<void> _initProvider() async {
+    final state = ref.read(agendamentoProvider);
+
+    if (state.clientes.isEmpty ||
+        state.profissionais.isEmpty ||
+        state.servicos.isEmpty) {
+      debugPrint('⏳ _initProvider aguardando listas carregarem');
+      return;
+    }
+
+    final notifier = ref.read(agendamentoProvider.notifier);
+
     notifier.setHorarioSelecionado(null);
     notifier.setHorariosDisponiveis([]);
     notifier.setDataSelecionada(widget.dataSelecionada);
@@ -75,20 +112,15 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
       final p = await supabase.from('profissionais').select().eq('salao_id', widget.salaoId).order('nome', ascending: true);
       final s = await supabase.from('servicos').select().eq('salao_id', widget.salaoId).order('nome', ascending: true);
       final pe = await supabase.from('profissional_especialidades').select();
+      
+      if (!mounted) return;
 
-      if (mounted) {
-        setState(() {
-          clientes = List<Map<String, dynamic>>.from(c);
-          profissionais = List<Map<String, dynamic>>.from(p);
-          servicos = List<Map<String, dynamic>>.from(s);
-        });
+      final notifier = ref.read(agendamentoProvider.notifier);
+      notifier.setClientes(List<Map<String, dynamic>>.from(c));
+      notifier.setProfissionais(List<Map<String, dynamic>>.from(p));
+      notifier.setServicos(List<Map<String, dynamic>>.from(s));
+      notifier.setEspecialidades(List<Map<String, dynamic>>.from(pe));
 
-        final notifier = ref.read(agendamentoProvider.notifier);
-        notifier.setClientes(List<Map<String, dynamic>>.from(c));
-        notifier.setProfissionais(List<Map<String, dynamic>>.from(p));
-        notifier.setServicos(List<Map<String, dynamic>>.from(s));
-        notifier.setEspecialidades(List<Map<String, dynamic>>.from(pe));
-      }
     } catch (e) {
       debugPrint('Erro ao carregar dados iniciais: $e');
     } finally {
@@ -362,52 +394,6 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
     }
   }
 
-  /*
-  Future<void> confirmarAgendamento() async {
-    final state = ref.read(agendamentoProvider);
-    if (state.clienteId == null ||
-        state.servicoSelecionado == null ||
-        state.horarioSelecionado == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Preencha todos os campos')),
-      );
-      return;
-    }
-
-    final partes = state.horarioSelecionado!.split(':');
-    final hora = TimeOfDay(
-      hour: int.parse(partes[0]),
-      minute: int.parse(partes[1]),
-    );
-
-    final agendamento = AgendamentoModel(
-      id: '',
-      data: state.dataSelecionada!,
-      hora: hora,
-      profissionalId: state.profissionalSelecionado,
-      servicoId: state.servicoSelecionado!,
-      clienteId: state.clienteId!,
-      salaoId: widget.salaoId,
-      status: AgendamentoStatus.pendente,
-      createdAt: DateTime.now(),
-    );
-
-    try {
-      await agendamentoService.adicionar(
-        agendamento,
-        ref,        // WidgetRef do Riverpod, normalmente do ConsumerWidget ou HookConsumerWidget
-        context,    // BuildContext da página atual
-      );
-      Navigator.pop(context, true);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
-    }
-
-  }
-  */
-  
   Future<void> confirmarAgendamento() async {
     final state = ref.read(agendamentoProvider);
 
@@ -510,7 +496,7 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-
+            /*
             DropdownSeguro(
               labelText: 'Cliente',
               items: clientes,
@@ -520,7 +506,225 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
               onChanged: (v) =>
                   ref.read(agendamentoProvider.notifier).selecionarCliente(v),
             ),
+            */
+            /*
+            DropdownSeguro(
+              labelText: 'Cliente',
+              items: clientes,
+              value: state.clienteId,  // O valor do Dropdown deve ser o clienteId do estado
+              getId: (c) => c['id'].toString(),
+              getLabel: (c) => c['nome'],
+              onChanged: (v) {
+                if (v != null) {
+                  // Atualiza o cliente selecionado no provider
+                  ref.read(agendamentoProvider.notifier).selecionarCliente(v);
+                  debugPrint('Cliente selecionado no dropdown: $v');
+                }
+              },
+            ),
+            */
+            DropdownSeguro(
+              labelText: 'Cliente',
+              items: state.clientes,
+              value: state.clienteId,  // O valor do Dropdown deve ser o clienteId do estado
+              getId: (c) => c['id'].toString(),
+              getLabel: (c) => c['nome'],
+              onChanged: (v) {
+                if (v != null) {
+                  // Atualiza o cliente selecionado no provider
+                  ref.read(agendamentoProvider.notifier).selecionarCliente(v);
+                  debugPrint('Cliente selecionado no dropdown: $v');
+                }
+              },
+            ),
+
+            /*
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('Novo cliente'),
+                /*
+                onPressed: () async {
+                  final clienteId = await showDialog<String>(
+                    context: context,
+                    builder: (context) => ClienteModal(
+                      salaoId: widget.salaoId,
+                    ),
+                  );
+
+                  if (clienteId != null && clienteId.isNotEmpty) {
+                    await _recarregarClientesESetar(clienteId);
+                  }
+                },
+                */
+                onPressed: () async {
+                  final clienteId = await showDialog<String>(
+                    context: context,
+                    builder: (context) => ClienteModal(
+                      salaoId: widget.salaoId,
+                    ),
+                  );
+
+                  if (clienteId == null || clienteId.isEmpty) return;
+
+                  // 🔁 Recarrega SOMENTE clientes (como era antes do checkout)
+                  final supabase = Supabase.instance.client;
+
+                  final resp = await supabase
+                      .from('clientes')
+                      .select()
+                      .eq('salao_id', widget.salaoId)
+                      .order('nome');
+
+                  final listaClientes = List<Map<String, dynamic>>.from(resp);
+
+                  final notifier = ref.read(agendamentoProvider.notifier);
+
+                  // ✅ Atualiza a lista (atualiza o dropdown)
+                  notifier.setClientes(listaClientes);
+
+                  // ✅ Seleciona automaticamente o novo cliente
+                  notifier.selecionarCliente(clienteId);
+                },
+
+              ),
+            ),
+            */
+            /*
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('Novo cliente'),
+                onPressed: () async {
+                  final clienteId = await showDialog<String>(
+                    context: context,
+                    builder: (context) => ClienteModal(
+                      salaoId: widget.salaoId,
+                    ),
+                  );
+
+                  if (clienteId == null || clienteId.isEmpty) return;
+
+                  // Recarregar clientes e atualizar o dropdown
+                  final supabase = Supabase.instance.client;
+                  final resp = await supabase
+                      .from('clientes')
+                      .select()
+                      .eq('salao_id', widget.salaoId)
+                      .order('nome');
+
+                  final listaClientes = List<Map<String, dynamic>>.from(resp);
+
+                  final notifier = ref.read(agendamentoProvider.notifier);
+
+                  // Atualiza a lista de clientes no estado
+                  notifier.setClientes(listaClientes);
+
+                  // Seleciona automaticamente o novo cliente
+                  notifier.selecionarCliente(clienteId);
+                },
+              ),
+            ),
+            */
+            /*
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('Novo cliente'),
+                onPressed: () async {
+                  final clienteId = await showDialog<String>(
+                    context: context,
+                    builder: (context) => ClienteModal(
+                      salaoId: widget.salaoId,
+                    ),
+                  );
+                  
+                  if (clienteId == null || clienteId.isEmpty) return;
+                  debugPrint('Cliente_id: $clienteId');
+
+                  // Recarregar clientes e atualizar o dropdown
+                  final supabase = Supabase.instance.client;
+                  final resp = await supabase
+                      .from('clientes')
+                      .select()
+                      .eq('salao_id', widget.salaoId)
+                      .order('nome');
+                  debugPrint('Resposta da consulta Supabase: $resp'); 
+
+                  final listaClientes = List<Map<String, dynamic>>.from(resp);
+
+                  final notifier = ref.read(agendamentoProvider.notifier);
+
+                  // Atualiza a lista de clientes no estado
+                  notifier.setClientes(listaClientes);
+
+                  // Selecione automaticamente o novo cliente pelo ID
+                  notifier.selecionarCliente(clienteId); 
+                  // Seleciona o cliente recém-criado
+                  
+                },
+              ),
+            ),
+            */
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                icon: const Icon(Icons.add),
+                label: const Text('Novo cliente'),
+                onPressed: () async {
+                  final clienteId = await showDialog<String>(
+                    context: context,
+                    builder: (context) => ClienteModal(
+                      salaoId: widget.salaoId,
+                    ),
+                  );
+
+                  if (clienteId == null || clienteId.isEmpty) return;
+                  debugPrint('Cliente_id: $clienteId'); // Cliente criado com sucesso
+
+                  // Recarregar clientes e atualizar o dropdown
+                  final supabase = Supabase.instance.client;
+                  final resp = await supabase
+                      .from('clientes')
+                      .select()
+                      .eq('salao_id', widget.salaoId)
+                      .order('nome');
+
+                  debugPrint('Resposta da consulta Supabase: $resp'); // Verificando resposta
+
+                  if (resp is List && resp.isNotEmpty) {
+                    final listaClientes = List<Map<String, dynamic>>.from(resp);
+
+                    final notifier = ref.read(agendamentoProvider.notifier);
+
+                    // Verificar se o widget ainda está montado antes de tentar atualizar o estado
+                    if (!mounted) {
+                      debugPrint('Widget não mais montado, abortando atualização de estado.');
+                      return;  // Verifica se o widget ainda está montado
+                    } else {
+                      debugPrint('Widget ainda está montado, continuando atualização de estado.');
+                    }
+
+                    // Atualiza a lista de clientes no estado
+                    notifier.setClientes(listaClientes);
+
+                    // Selecione automaticamente o novo cliente pelo ID
+                    notifier.selecionarCliente(clienteId);
+
+                    debugPrint('Cliente selecionado: $clienteId');
+                  } else {
+                    debugPrint('Erro: Nenhum cliente encontrado ou resposta inválida');
+                  }
+                },
+              ),
+            ),
+
+
             const SizedBox(height: 16),
+            /*
             DropdownSeguro(
               labelText: 'Profissional (opcional)',
               mostrarOpcaoVazia: true,
@@ -534,8 +738,23 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
                 await carregarHorarios(profissionalIdForcado: v);
               },
             ),            
-            const SizedBox(height: 16),
+            */
 
+            const SizedBox(height: 16),
+            DropdownSeguro(
+              labelText: 'Profissional (opcional)',
+              mostrarOpcaoVazia: true,
+              items: state.profissionais,
+              value: state.profissionalSelecionado,
+              getId: (p) => p['id'].toString(),
+              getLabel: (p) => p['nome'],
+              onChanged: (v) async {
+                ref.read(agendamentoProvider.notifier).selecionarProfissional(v);
+                await carregarHorarios(profissionalIdForcado: v);
+              },
+            ),
+            const SizedBox(height: 16),
+            /*
             DropdownSeguro(
               labelText: 'Serviço',
               items: servicosFiltrados,
@@ -548,6 +767,19 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
                 await carregarHorarios(servicoIdForcado: v);
               },
             ),
+            */
+            DropdownSeguro(
+              labelText: 'Serviço',
+              items: servicosFiltrados,
+              value: state.servicoSelecionado,
+              getId: (s) => s['id'].toString(),
+              getLabel: (s) => s['nome'],
+              onChanged: (v) async {
+                ref.read(agendamentoProvider.notifier).selecionarServico(v);
+                await carregarHorarios(servicoIdForcado: v);
+              },
+            ),
+
             const SizedBox(height: 16),
 
             if (buscandoSlots)
