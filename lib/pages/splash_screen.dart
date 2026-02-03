@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:app_links/app_links.dart';
 import '../deep_link_handler.dart';
-import 'package:app_salao_pro/pages/home_page.dart'; // Import necessário para o Navigator
+import 'package:app_salao_pro/pages/home_page.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -45,8 +45,6 @@ class _SplashScreenState extends State<SplashScreen> {
     try {
       debugPrint('🛡️ Watchdog: Testando conexão com Supabase...');
       
-      // Tenta uma busca ultra leve com timeout de 5 segundos
-      // Isso valida se o "Client" está vivo ou se está em estado zumbi
       await client
           .from('profiles')
           .select('id')
@@ -58,10 +56,8 @@ class _SplashScreenState extends State<SplashScreen> {
       _navigateToHome(session);
       
     } catch (e) {
-      // 🔥 O PONTO CRÍTICO: Se cair aqui, o Supabase está travado/zumbi
       debugPrint('🚨 Watchdog: Erro de integridade detectado: $e');
       
-      // Forçamos o logout para limpar o cache corrompido que impede o app de abrir
       try {
         await client.auth.signOut();
       } catch (_) {}
@@ -76,9 +72,15 @@ class _SplashScreenState extends State<SplashScreen> {
       if (initialLink != null) {
         debugPrint('Deep link inicial detectado: $initialLink');
         await DeepLinkHandler.handleInitialLink(initialLink.toString());
+        
         if (mounted) {
-          Navigator.of(context).pushReplacementNamed('/redefinir-senha');
           _isNavigated = true;
+          // Proteção para navegação via Deep Link
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.of(context).pushReplacementNamed('/redefinir-senha');
+            }
+          });
           return true;
         }
       }
@@ -92,8 +94,6 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted || _isNavigated) return;
     _isNavigated = true;
 
-    // Buscamos o salaoId do metadado do usuário ou perfil
-    // Ajuste conforme onde você guarda o salaoId no seu login
     final userId = session.user.id;
     final perfil = await Supabase.instance.client
         .from('profiles')
@@ -104,16 +104,27 @@ class _SplashScreenState extends State<SplashScreen> {
     final salaoId = perfil?['salao_id'] ?? '';
 
     if (mounted) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => HomePage(salaoId: salaoId)),
-      );
+      // 🛡️ Proteção L_debugLocked: Navega apenas após o fim do frame de Splash
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => HomePage(salaoId: salaoId)),
+          );
+        }
+      });
     }
   }
 
   void _navigateToLogin() {
     if (!mounted || _isNavigated) return;
     _isNavigated = true;
-    Navigator.of(context).pushReplacementNamed('/login');
+
+    // 🛡️ Proteção L_debugLocked
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed('/login');
+      }
+    });
   }
 
   @override
