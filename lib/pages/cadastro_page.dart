@@ -23,6 +23,7 @@ class _CadastroPageState extends State<CadastroPage> {
   );
 
   bool carregando = false;
+  String mensagemStatus = 'Criando sua conta...'; // Para feedback de progresso
 
   Future<void> cadastrarDono() async {
     if (carregando) return;
@@ -45,8 +46,13 @@ class _CadastroPageState extends State<CadastroPage> {
       return;
     }
 
-    setState(() => carregando = true);
+    setState(() {
+      carregando = true;
+      mensagemStatus = 'Criando sua conta...';
+    });
+
     try {
+      // 1. Auth SignUp
       final authResponse = await Supabase.instance.client.auth.signUp(
         email: email,
         password: senha,
@@ -58,6 +64,7 @@ class _CadastroPageState extends State<CadastroPage> {
         return;
       }
 
+      // 2. Criar Profile
       await Supabase.instance.client.from('profiles').insert({
         'id': user.id,
         'email': email,
@@ -65,6 +72,8 @@ class _CadastroPageState extends State<CadastroPage> {
         'role': 'dono',
       });
 
+      // 3. Criar Salão
+      setState(() => mensagemStatus = 'Criando seu salão...');
       final salaoResponse =
           await Supabase.instance.client.from('saloes').insert({
         'nome': nomeSalao,
@@ -79,16 +88,24 @@ class _CadastroPageState extends State<CadastroPage> {
         return;
       }
 
+      // 🎯 4. Clonar Templates (O "Onboarding" Automático)
+      setState(() => mensagemStatus = 'Configurando serviços e agenda...');
+      await Supabase.instance.client.rpc(
+        'clonar_templates_para_novo_salao',
+        params: {'p_salao_id': salaoId},
+      );
+
+      // 5. Vincular Salão ao Profile
       await Supabase.instance.client
           .from('profiles')
           .update({'salao_id': salaoId}).eq('id', user.id);
 
       mostrarErro('Cadastro realizado com sucesso!');
-      Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
       mostrarErro(_traduzErroSupabase(e));
     } finally {
-      setState(() => carregando = false);
+      if (mounted) setState(() => carregando = false);
     }
   }
 
@@ -108,13 +125,14 @@ class _CadastroPageState extends State<CadastroPage> {
   }
 
   void mostrarErro(String mensagem) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           mensagem,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Colors.white, // Para garantir legibilidade no snackbar
-          ),
+                color: Colors.white,
+              ),
         ),
       ),
     );
@@ -126,7 +144,7 @@ class _CadastroPageState extends State<CadastroPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Criar Conta')),
-      body: Padding(
+      body: SingleChildScrollView( // Adicionado para evitar overflow com teclado
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [
@@ -139,9 +157,7 @@ class _CadastroPageState extends State<CadastroPage> {
               keyboardType: TextInputType.emailAddress,
               style: estiloCampo,
             ),
-
             const SizedBox(height: 16),
-
             TextField(
               controller: senhaController,
               decoration: const InputDecoration(
@@ -151,9 +167,7 @@ class _CadastroPageState extends State<CadastroPage> {
               obscureText: true,
               style: estiloCampo,
             ),
-
             const SizedBox(height: 16),
-
             TextField(
               controller: nomeSalaoController,
               decoration: const InputDecoration(
@@ -162,9 +176,7 @@ class _CadastroPageState extends State<CadastroPage> {
               ),
               style: estiloCampo,
             ),
-
             const SizedBox(height: 16),
-
             TextField(
               controller: celularSalaoController,
               decoration: const InputDecoration(
@@ -175,9 +187,7 @@ class _CadastroPageState extends State<CadastroPage> {
               inputFormatters: [celularMask],
               style: estiloCampo,
             ),
-
             const SizedBox(height: 16),
-
             DropdownButtonFormField<String>(
               value: modoAgendamento,
               decoration: const InputDecoration(
@@ -194,18 +204,26 @@ class _CadastroPageState extends State<CadastroPage> {
                   setState(() => modoAgendamento = value!),
               style: estiloCampo,
             ),
-
-            const SizedBox(height: 24),
-
-            carregando
-                ? const CircularProgressIndicator()
-                : SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: cadastrarDono,
-                      child: const Text('Criar Conta'),
-                    ),
+            const SizedBox(height: 32),
+            if (carregando)
+              Column(
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  Text(
+                    mensagemStatus,
+                    style: estiloCampo?.copyWith(fontWeight: FontWeight.bold),
                   ),
+                ],
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: cadastrarDono,
+                  child: const Text('Criar Conta'),
+                ),
+              ),
           ],
         ),
       ),
