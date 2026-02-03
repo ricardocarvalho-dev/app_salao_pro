@@ -157,9 +157,29 @@ class _ServicosPageState extends State<ServicosPage> {
           : '',
     );
 
+    /*
     String? duracaoSelecionada = servico != null
         ? '${(servico.duracaoMinutos ~/ 60).toString().padLeft(2, '0')}:${(servico.duracaoMinutos % 60).toString().padLeft(2, '0')}'
         : null;
+    */
+
+    // --- O TRECHO NOVO ENTRA AQUI ---
+      
+      // 1. Calcula a string de duração vinda do banco
+      String? duracaoCalculada = servico != null
+          ? '${(servico.duracaoMinutos ~/ 60).toString().padLeft(2, '0')}:${(servico.duracaoMinutos % 60).toString().padLeft(2, '0')}'
+          : null;
+
+      // 2. Verifica se essa duração existe na lista global 'duracoes'
+      // Se não existir (ex: 40 min vindo do template), adicionamos para não quebrar o Dropdown
+      if (duracaoCalculada != null && !duracoes.contains(duracaoCalculada)) {
+        duracoes.add(duracaoCalculada);
+        duracoes.sort(); 
+      }
+
+      String? duracaoSelecionada = duracaoCalculada;
+      
+      // --- FIM DO TRECHO NOVO ---
 
     String? especialidadeId = servico?.especialidadeId;
 
@@ -205,7 +225,7 @@ class _ServicosPageState extends State<ServicosPage> {
               DropdownButtonFormField<String>(
                 value: duracaoSelecionada,
                 decoration:
-                    const InputDecoration(labelText: 'Duração'),
+                    const InputDecoration(labelText: 'Duração em minutos'),
                 items: duracoes
                     .map(
                       (d) => DropdownMenuItem(
