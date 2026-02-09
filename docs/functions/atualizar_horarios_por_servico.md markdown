@@ -1,0 +1,20 @@
+# Função: atualizar_horarios_por_servico(uuid)
+
+## Objetivo
+Recalcular os horários disponíveis de um serviço específico.
+
+## Lógica
+1. Apaga todos os slots futuros não ocupados (`data >= CURRENT_DATE`).
+2. Para cada dia de hoje até +30 dias:
+   - Verifica os horários ativos em `horarios_servicos`.
+   - Gera slots com base na duração do serviço.
+   - Cria:
+     - Slots gerais (sem profissional).
+     - Slots específicos por profissional (se `modo_agendamento = 'por_profissional'`).
+
+## Segurança
+- Só gera slots futuros (evita horários passados).
+- Usa `ON CONFLICT DO NOTHING` para evitar duplicações.
+
+## Impacto
+Atualiza a tabela `horarios_disponiveis` com os novos horários válidos.

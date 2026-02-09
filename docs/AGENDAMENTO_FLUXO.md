@@ -71,3 +71,5 @@ Fluxo validado manualmente em:
 
 Qualquer alteração futura neste fluxo deve considerar este documento
 como referência oficial.
+
+## 📚 Documentação técnica de triggers e função central Para detalhes da arquitetura de atualização automática dos horários, consulte: - [Função central: atualizar_horarios_por_servico](functions/atualizar_horarios_por_servico.md) - Triggers: - [trg_horarios_servicos_atualizar_horarios_fn](triggers/horarios_servicos.md) - [trg_profissionais_atualizar_horarios_fn](triggers/profissionais.md) - [trg_profissional_especialidades_atualizar_horarios_fn](triggers/profissional_especialidades.md) - [trg_servico_atualizar_horarios](triggers/servicos.md) - [trg_servicos_atualizar_horarios_fn](triggers/servicos_criticos.md) ## 📊 Fluxograma Veja o diagrama completo em [`fluxograma/arquitetura_triggers.png`](fluxograma/arquitetura_triggers.png).
