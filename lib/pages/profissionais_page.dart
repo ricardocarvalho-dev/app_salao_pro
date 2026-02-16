@@ -154,6 +154,7 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
     );
   }
 
+  /*
   Future<void> excluirProfissional(String id) async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -173,6 +174,49 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
         await carregarDados();
       } catch (e) {
         debugPrint('Erro ao excluir profissional: $e');
+      }
+    }
+  }
+  */
+  Future<void> excluirProfissional(String id) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar exclusão'),
+        content: const Text('Deseja realmente excluir este profissional?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      // 🔹 Optimistic UI: remove da lista local imediatamente
+      setState(() {
+        profissionais.removeWhere((p) => p.id == id);
+      });
+
+      try {
+        await service.excluir(id);
+
+        // Feedback visual de sucesso
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profissional excluído com sucesso!')),
+        );
+      } catch (e) {
+        // Em caso de erro, recarrega lista para manter consistência
+        await carregarDados();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao excluir profissional: $e')),
+        );
       }
     }
   }

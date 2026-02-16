@@ -42,21 +42,6 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
   bool buscandoSlots = false;
 
   @override
-  /*
-  void initState() {
-    super.initState();
-    agendamentoService = service.AgendamentoService(widget.salaoId);
-
-    Future.microtask(() async {
-      if (mounted) {
-        ref.invalidate(agendamentoProvider);
-        await _initProvider(); 
-        await _carregarDadosIniciais();
-      }
-    });
-  }
-  */
-  @override
   void initState() {
     super.initState();
     agendamentoService = service.AgendamentoService(widget.salaoId);
@@ -74,19 +59,12 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
     });
   }
 
-  /*
-  Future<void> _initProvider() async {
-    final notifier = ref.read(agendamentoProvider.notifier);
-    notifier.setHorarioSelecionado(null);
-    notifier.setHorariosDisponiveis([]);
-    notifier.setDataSelecionada(widget.dataSelecionada);
-    notifier.selecionarCliente(widget.clienteId);
-    notifier.selecionarProfissional(widget.profissionalId);
-    notifier.selecionarServico(widget.servicoId);
-  }
-  */
   Future<void> _initProvider() async {
     final state = ref.read(agendamentoProvider);
+    final notifier = ref.read(agendamentoProvider.notifier);
+
+    // ✅ Sempre aplica a data selecionada
+    notifier.setDataSelecionada(widget.dataSelecionada);
 
     if (state.clientes.isEmpty ||
         state.profissionais.isEmpty ||
@@ -95,11 +73,8 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
       return;
     }
 
-    final notifier = ref.read(agendamentoProvider.notifier);
-
     notifier.setHorarioSelecionado(null);
     notifier.setHorariosDisponiveis([]);
-    notifier.setDataSelecionada(widget.dataSelecionada);
     notifier.selecionarCliente(widget.clienteId);
     notifier.selecionarProfissional(widget.profissionalId);
     notifier.selecionarServico(widget.servicoId);
@@ -127,173 +102,6 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
       if (mounted) setState(() => carregandoDados = false);
     }
   }
-
-  // ✅ Função Corrigida com Parâmetros Forçados
-  /*
-  Future<void> carregarHorarios({
-    String? profissionalIdForcado,
-    String? servicoIdForcado,
-  }) async {
-    final state = ref.read(agendamentoProvider);
-
-    final sId = servicoIdForcado ?? state.servicoSelecionado;
-    final data = state.dataSelecionada;
-
-    if (sId == null || data == null) return;
-
-    // 🔐 Regra de modo de agendamento
-    final profissionalValido =
-        widget.modoAgendamento == 'por_profissional'
-            ? (profissionalIdForcado ?? state.profissionalSelecionado)
-            : null;
-
-    final acimaD30 =
-        data.isAfter(DateTime.now().add(const Duration(days: 30)));
-
-    if (mounted) setState(() => buscandoSlots = true);
-
-    try {
-      List<HorarioSlot> slots = [];
-
-      if (acimaD30) {
-        // ==========================
-        // 🔵 PREVIEW (D+30+)
-        // ==========================
-        final preview = await agendamentoService.gerarSlotsPreview(
-          servicoId: sId,
-          data: data,
-          profissionalId: profissionalValido,
-        );
-
-        slots = preview.map((row) {
-          return HorarioSlot(
-            id: 'preview_${row['hora']}',
-            hora: row['hora'],
-            ocupado: row['ocupado'] == true,
-            passado: row['passado'] == true,
-          );
-        }).toList();
-      } else {
-        // ==========================
-        // 🟢 GRADE REAL (≤ D+30)
-        // ==========================
-        final supabase = Supabase.instance.client;
-
-        var query = supabase
-            .from('horarios_disponiveis')
-            .select()
-            .eq('servico_id', sId)
-            .eq('data', DateFormat('yyyy-MM-dd').format(data))
-            .eq('status', 'ativo');
-
-        if (profissionalValido != null && profissionalValido.isNotEmpty) {
-          query = query.eq('profissional_id', profissionalValido);
-        } else {
-          query = query.is_('profissional_id', null);
-        }
-
-        final resp = await query;
-        final now = DateTime.now();
-
-        slots = List<Map<String, dynamic>>.from(resp).map((h) {
-          final partes = h['horario'].toString().split(':');
-
-          final dt = DateTime(
-            data.year,
-            data.month,
-            data.day,
-            int.parse(partes[0]),
-            int.parse(partes[1]),
-          );
-
-          return HorarioSlot(
-            id: h['id'].toString(),
-            hora:
-                '${partes[0].padLeft(2, '0')}:${partes[1].padLeft(2, '0')}',
-            ocupado: h['ocupado'] == true,
-            passado: dt.isBefore(now),
-          );
-        }).toList();
-      }
-
-      slots.sort((a, b) => a.hora.compareTo(b.hora));
-      ref.read(agendamentoProvider.notifier).setHorariosDisponiveis(slots);
-    } catch (e) {
-      debugPrint('Erro ao carregar horários: $e');
-      ref.read(agendamentoProvider.notifier).setHorariosDisponiveis([]);
-    } finally {
-      if (mounted) setState(() => buscandoSlots = false);
-    }
-  }
-  */
-  /*
-  Future<void> carregarHorarios({
-    String? profissionalIdForcado,
-    String? servicoIdForcado,
-  }) async {
-    final state = ref.read(agendamentoProvider);
-
-    // Definimos os IDs prioritários (parâmetros ou estado)
-    final sId = servicoIdForcado ?? state.servicoSelecionado;
-    final data = state.dataSelecionada;
-    
-    // 🎯 IMPORTANTE: Aqui garantimos que o filtro siga a seleção do Dropdown
-    final profissionalValido = (profissionalIdForcado != null) 
-        ? profissionalIdForcado 
-        : state.profissionalSelecionado;
-
-    if (sId == null || data == null) return;
-
-    if (mounted) setState(() => buscandoSlots = true);
-
-    try {
-      // Limpamos para garantir que a UI não mostre dados "sujos"
-      ref.read(agendamentoProvider.notifier).setHorariosDisponiveis([]);
-
-      final supabase = Supabase.instance.client;
-      
-      var query = supabase
-          .from('horarios_disponiveis')
-          .select()
-          .eq('servico_id', sId)
-          .eq('data', DateFormat('yyyy-MM-dd').format(data))
-          .eq('status', 'ativo');
-
-      // 🔥 FILTRO ESTRITO PARA CADA CASO
-      if (profissionalValido != null && profissionalValido.isNotEmpty) {
-        // Se tem profissional selecionado (vindo do Dropdown ou do initState)
-        // Buscamos APENAS a agenda dele.
-        query = query.eq('profissional_id', profissionalValido);
-      } else {
-        // Se for "Todos" ou nenhum selecionado, buscamos apenas a grade geral
-        query = query.is_('profissional_id', null);
-      }
-
-      final resp = await query;
-      final now = DateTime.now();
-
-      final List<HorarioSlot> slots = List<Map<String, dynamic>>.from(resp).map((h) {
-        final partes = h['horario'].toString().split(':');
-        final dtSlot = DateTime(data.year, data.month, data.day, int.parse(partes[0]), int.parse(partes[1]));
-
-        return HorarioSlot(
-          id: h['id'].toString(),
-          hora: '${partes[0].padLeft(2, '0')}:${partes[1].padLeft(2, '0')}',
-          ocupado: h['ocupado'] == true,
-          passado: dtSlot.isBefore(now),
-        );
-      }).toList();
-
-      slots.sort((a, b) => a.hora.compareTo(b.hora));
-      ref.read(agendamentoProvider.notifier).setHorariosDisponiveis(slots);
-
-    } catch (e) {
-      debugPrint('Erro ao carregar horários: $e');
-    } finally {
-      if (mounted) setState(() => buscandoSlots = false);
-    }
-  }
-  */
 
   Future<void> carregarHorarios({
     String? profissionalIdForcado,
@@ -395,7 +203,11 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
   }
 
   Future<void> confirmarAgendamento() async {
-    final state = ref.read(agendamentoProvider);
+    final state = ref.read(agendamentoProvider); // ou ref.watch, dependendo do caso
+    //if (state.clienteId == null) { 
+      //debugPrint('Erro: Nenhum cliente selecionado'); // aqui você pode mostrar um alerta para o usuário 
+      //return; 
+    //} 
 
     if (state.clienteId == null ||
         state.servicoSelecionado == null ||
@@ -410,14 +222,6 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
     final horaStr =
         '${partes[0].padLeft(2, '0')}:${partes[1].padLeft(2, '0')}';
 
-    /*
-    final data = state.dataSelecionada!;
-    final agora = DateTime.now();
-    final limite = DateTime(agora.year, agora.month, agora.day)
-        .add(const Duration(days: 30));
-
-    final bool foraDaGrade = data.isAfter(limite);
-    */
     final data = state.dataSelecionada!;
     final agora = DateTime.now();
     final limite = DateTime(agora.year, agora.month, agora.day)
@@ -479,6 +283,12 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
     final hTheme = Theme.of(context).extension<HorarioTheme>()!;
     final servicosFiltrados = ref.read(agendamentoProvider.notifier).filtrarServicos(state.profissionalSelecionado);    
 
+    // 🔎 Debug para verificar os valores antes de montar os dropdowns 
+    debugPrint('Clientes: ${state.clientes}'); 
+    debugPrint('ClienteId: ${state.clienteId}'); 
+    debugPrint('Profissionais: ${state.profissionais}'); 
+    debugPrint('ProfissionalSelecionado: ${state.profissionalSelecionado}');
+  
     if (carregandoDados) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -491,44 +301,33 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
         padding: const EdgeInsets.all(16),
         child: ListView(
           children: [
+            /*
             Text(
               'Data: ${DateFormat('dd/MM/yyyy').format(state.dataSelecionada!)}',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
+            */
+            //////////////////////
+            Text(
+              state.dataSelecionada != null
+                  ? 'Data: ${DateFormat('dd/MM/yyyy').format(state.dataSelecionada!)}'
+                  : 'Data não selecionada',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            //////////////////////
             const SizedBox(height: 16),
-            /*
-            DropdownSeguro(
-              labelText: 'Cliente',
-              items: clientes,
-              value: state.clienteId,
-              getId: (c) => c['id'].toString(),
-              getLabel: (c) => c['nome'],
-              onChanged: (v) =>
-                  ref.read(agendamentoProvider.notifier).selecionarCliente(v),
-            ),
-            */
-            /*
-            DropdownSeguro(
-              labelText: 'Cliente',
-              items: clientes,
-              value: state.clienteId,  // O valor do Dropdown deve ser o clienteId do estado
-              getId: (c) => c['id'].toString(),
-              getLabel: (c) => c['nome'],
-              onChanged: (v) {
-                if (v != null) {
-                  // Atualiza o cliente selecionado no provider
-                  ref.read(agendamentoProvider.notifier).selecionarCliente(v);
-                  debugPrint('Cliente selecionado no dropdown: $v');
-                }
-              },
-            ),
-            */
             DropdownSeguro(
               labelText: 'Cliente',
               items: state.clientes,
-              value: state.clienteId,  // O valor do Dropdown deve ser o clienteId do estado
+              //value: state.clienteId,  // O valor do Dropdown deve ser o clienteId do estado
+              value: state.clientes.isNotEmpty ? state.clienteId : null,
+              //value: state.clientes.isNotEmpty ? state.clienteId : '', // string vazia quando não há clientes
               getId: (c) => c['id'].toString(),
               getLabel: (c) => c['nome'],
+              //
+              mostrarOpcaoVazia: true, 
+              textoOpcaoVazia: 'Selecione um cliente',
+              //
               onChanged: (v) {
                 if (v != null) {
                   // Atualiza o cliente selecionado no provider
@@ -537,138 +336,6 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
                 }
               },
             ),
-
-            /*
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('Novo cliente'),
-                /*
-                onPressed: () async {
-                  final clienteId = await showDialog<String>(
-                    context: context,
-                    builder: (context) => ClienteModal(
-                      salaoId: widget.salaoId,
-                    ),
-                  );
-
-                  if (clienteId != null && clienteId.isNotEmpty) {
-                    await _recarregarClientesESetar(clienteId);
-                  }
-                },
-                */
-                onPressed: () async {
-                  final clienteId = await showDialog<String>(
-                    context: context,
-                    builder: (context) => ClienteModal(
-                      salaoId: widget.salaoId,
-                    ),
-                  );
-
-                  if (clienteId == null || clienteId.isEmpty) return;
-
-                  // 🔁 Recarrega SOMENTE clientes (como era antes do checkout)
-                  final supabase = Supabase.instance.client;
-
-                  final resp = await supabase
-                      .from('clientes')
-                      .select()
-                      .eq('salao_id', widget.salaoId)
-                      .order('nome');
-
-                  final listaClientes = List<Map<String, dynamic>>.from(resp);
-
-                  final notifier = ref.read(agendamentoProvider.notifier);
-
-                  // ✅ Atualiza a lista (atualiza o dropdown)
-                  notifier.setClientes(listaClientes);
-
-                  // ✅ Seleciona automaticamente o novo cliente
-                  notifier.selecionarCliente(clienteId);
-                },
-
-              ),
-            ),
-            */
-            /*
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('Novo cliente'),
-                onPressed: () async {
-                  final clienteId = await showDialog<String>(
-                    context: context,
-                    builder: (context) => ClienteModal(
-                      salaoId: widget.salaoId,
-                    ),
-                  );
-
-                  if (clienteId == null || clienteId.isEmpty) return;
-
-                  // Recarregar clientes e atualizar o dropdown
-                  final supabase = Supabase.instance.client;
-                  final resp = await supabase
-                      .from('clientes')
-                      .select()
-                      .eq('salao_id', widget.salaoId)
-                      .order('nome');
-
-                  final listaClientes = List<Map<String, dynamic>>.from(resp);
-
-                  final notifier = ref.read(agendamentoProvider.notifier);
-
-                  // Atualiza a lista de clientes no estado
-                  notifier.setClientes(listaClientes);
-
-                  // Seleciona automaticamente o novo cliente
-                  notifier.selecionarCliente(clienteId);
-                },
-              ),
-            ),
-            */
-            /*
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                icon: const Icon(Icons.add),
-                label: const Text('Novo cliente'),
-                onPressed: () async {
-                  final clienteId = await showDialog<String>(
-                    context: context,
-                    builder: (context) => ClienteModal(
-                      salaoId: widget.salaoId,
-                    ),
-                  );
-                  
-                  if (clienteId == null || clienteId.isEmpty) return;
-                  debugPrint('Cliente_id: $clienteId');
-
-                  // Recarregar clientes e atualizar o dropdown
-                  final supabase = Supabase.instance.client;
-                  final resp = await supabase
-                      .from('clientes')
-                      .select()
-                      .eq('salao_id', widget.salaoId)
-                      .order('nome');
-                  debugPrint('Resposta da consulta Supabase: $resp'); 
-
-                  final listaClientes = List<Map<String, dynamic>>.from(resp);
-
-                  final notifier = ref.read(agendamentoProvider.notifier);
-
-                  // Atualiza a lista de clientes no estado
-                  notifier.setClientes(listaClientes);
-
-                  // Selecione automaticamente o novo cliente pelo ID
-                  notifier.selecionarCliente(clienteId); 
-                  // Seleciona o cliente recém-criado
-                  
-                },
-              ),
-            ),
-            */
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
@@ -722,52 +389,23 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
               ),
             ),
 
-
             const SizedBox(height: 16),
-            /*
-            DropdownSeguro(
-              labelText: 'Profissional (opcional)',
-              mostrarOpcaoVazia: true,
-              items: profissionais, 
-              value: state.profissionalSelecionado,
-              getId: (p) => p['id'].toString(),
-              getLabel: (p) => p['nome'],
-              onChanged: (v) async {
-                ref.read(agendamentoProvider.notifier).selecionarProfissional(v);
-                // Forçamos o ID do profissional para a consulta ser imediata
-                await carregarHorarios(profissionalIdForcado: v);
-              },
-            ),            
-            */
 
-            const SizedBox(height: 16),
             DropdownSeguro(
               labelText: 'Profissional (opcional)',
               mostrarOpcaoVazia: true,
               items: state.profissionais,
-              value: state.profissionalSelecionado,
+              //value: state.profissionalSelecionado,
+              value: state.profissionais.isNotEmpty ? state.profissionalSelecionado : null,
               getId: (p) => p['id'].toString(),
               getLabel: (p) => p['nome'],
+              textoOpcaoVazia: 'Selecione um profissional ou deixe em branco',
               onChanged: (v) async {
                 ref.read(agendamentoProvider.notifier).selecionarProfissional(v);
                 await carregarHorarios(profissionalIdForcado: v);
               },
             ),
             const SizedBox(height: 16),
-            /*
-            DropdownSeguro(
-              labelText: 'Serviço',
-              items: servicosFiltrados,
-              value: state.servicoSelecionado,
-              getId: (s) => s['id'].toString(),
-              getLabel: (s) => s['nome'],
-              onChanged: (v) async {
-                ref.read(agendamentoProvider.notifier).selecionarServico(v);
-                // Forçamos o ID do serviço para a consulta ser imediata
-                await carregarHorarios(servicoIdForcado: v);
-              },
-            ),
-            */
             DropdownSeguro(
               labelText: 'Serviço',
               items: servicosFiltrados,

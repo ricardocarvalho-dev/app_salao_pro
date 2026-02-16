@@ -316,6 +316,7 @@ class _ServicosPageState extends State<ServicosPage> {
   // ======================
   // EXCLUIR
   // ======================
+  /*
   Future<void> excluirServico(String id) async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -344,6 +345,53 @@ class _ServicosPageState extends State<ServicosPage> {
       await carregarServicos();
     }
   }
+  */
+  Future<void> excluirServico(String id) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar exclusão'),
+        content: const Text('Deseja realmente excluir este serviço?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Excluir',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      // 🔹 Optimistic UI: remove da lista local imediatamente
+      setState(() {
+        servicos.removeWhere((s) => s.id == id);
+      });
+
+      try {
+        await service.excluir(id);
+
+        // Feedback visual de sucesso
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Serviço excluído com sucesso!')),
+        );
+      } catch (e) {
+        // Em caso de erro, opcionalmente reverter
+        await carregarServicos();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao excluir serviço: $e')),
+        );
+      }
+    }
+  }
+
 
   // ======================
   // BUILD

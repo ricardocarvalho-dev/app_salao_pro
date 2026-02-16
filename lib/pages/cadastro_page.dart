@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:async';
+import 'package:app_salao_pro/pages/home_page.dart';
 
 class CadastroPage extends StatefulWidget {
   const CadastroPage({super.key});
@@ -24,6 +26,9 @@ class _CadastroPageState extends State<CadastroPage> {
 
   bool carregando = false;
   String mensagemStatus = 'Criando sua conta...'; // Para feedback de progresso
+
+  // Instância do storage seguro
+  final storage = const FlutterSecureStorage();
 
   Future<void> cadastrarDono() async {
     if (carregando) return;
@@ -52,6 +57,102 @@ class _CadastroPageState extends State<CadastroPage> {
     });
 
     try {
+      // 🔹 Timeout de 15 segundos para evitar loop infinito
+      await Future.any([
+        _processoCadastro(email, senha, nomeSalao, celularSalao),
+        Future.delayed(const Duration(seconds: 15), () {
+          throw TimeoutException('Tempo limite atingido');
+        }),
+      ]);
+    } catch (e) {
+      if (e is TimeoutException) {
+        // 🔹 SnackBar com botão "Tentar novamente"
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Demorou demais. Deseja tentar novamente?'),
+              action: SnackBarAction(
+                label: 'Tentar novamente',
+                onPressed: () {
+                  cadastrarDono(); // retry
+                },
+              ),
+            ),
+          );
+        }
+      } else {
+        mostrarErro(_traduzErroSupabase(e));
+      }
+    } finally {
+      if (mounted) setState(() => carregando = false);
+    }
+  }
+  /*
+  Future<void> _processoCadastro(
+      String email, String senha, String nomeSalao, String celularSalao) async {
+    // 1. Auth SignUp
+    final authResponse = await Supabase.instance.client.auth.signUp(
+      email: email,
+      password: senha,
+    );
+
+    final user = authResponse.user;
+    if (user == null) {
+      throw Exception('Erro ao criar conta. Tente novamente mais tarde.');
+    }
+
+    // 🔹 Salvar token para login automático
+    final token = authResponse.session?.accessToken;
+    if (token != null) {
+      await storage.write(key: 'jwt_token', value: token);
+    }
+
+    // 2. Criar Profile
+    await Supabase.instance.client.from('profiles').insert({
+      'id': user.id,
+      'email': email,
+      'nome': nomeSalao,
+      'role': 'dono',
+    });
+
+    // 3. Criar Salão
+    setState(() => mensagemStatus = 'Finalizando configuração...');
+    final salaoResponse =
+        await Supabase.instance.client.from('saloes').insert({
+      'nome': nomeSalao,
+      'celular': celularSalao,
+      'dono_id': user.id,
+      'modo_agendamento': modoAgendamento,
+    }).select().single();
+
+    final salaoId = salaoResponse['id']?.toString();
+    if (salaoId == null || salaoId.isEmpty) {
+      throw Exception('Erro ao criar salão.');
+    }
+    
+    /*
+    // 4. Clonar Templates
+    setState(() => mensagemStatus = 'Configurando serviços e agenda...');
+    await Supabase.instance.client.rpc(
+      'clonar_templates_para_novo_salao',
+      params: {'p_salao_id': salaoId},
+    );
+    */
+
+    // 5. Vincular Salão ao Profile
+    await Supabase.instance.client
+        .from('profiles')
+        .update({'salao_id': salaoId}).eq('id', user.id);
+
+    // 🔹 Feedback rápido + redirecionamento automático
+    mostrarErro('Cadastro realizado com sucesso! Seu salão está sendo configurado.');
+    if (mounted) {
+      Navigator.pushReplacementNamed(context, '/home');
+    }
+  }
+  */
+  Future<void> _processoCadastro(
+        String email, String senha, String nomeSalao, String celularSalao) async {
       // 1. Auth SignUp
       final authResponse = await Supabase.instance.client.auth.signUp(
         email: email,
@@ -60,8 +161,13 @@ class _CadastroPageState extends State<CadastroPage> {
 
       final user = authResponse.user;
       if (user == null) {
-        mostrarErro('Erro ao criar conta. Tente novamente mais tarde.');
-        return;
+        throw Exception('Erro ao criar conta. Tente novamente mais tarde.');
+      }
+
+      // Salvar token para login automático
+      final token = authResponse.session?.accessToken;
+      if (token != null) {
+        await storage.write(key: 'jwt_token', value: token);
       }
 
       // 2. Criar Profile
@@ -73,40 +179,61 @@ class _CadastroPageState extends State<CadastroPage> {
       });
 
       // 3. Criar Salão
-      setState(() => mensagemStatus = 'Criando seu salão...');
-      final salaoResponse =
-          await Supabase.instance.client.from('saloes').insert({
+      setState(() => mensagemStatus = 'Finalizando configuração...');
+
+      // Inserimos sem esperar o retorno do objeto completo
+      await Supabase.instance.client.from('saloes').insert({
         'nome': nomeSalao,
         'celular': celularSalao,
         'dono_id': user.id,
         'modo_agendamento': modoAgendamento,
-      }).select().single();
+      });
 
-      final salaoId = salaoResponse['id']?.toString();
-      if (salaoId == null || salaoId.isEmpty) {
-        mostrarErro('Erro ao criar salão.');
-        return;
+      // BUSCA EXPLÍCITA: Pegamos o ID do salão mais recente deste dono
+      final buscaSalao = await Supabase.instance.client
+          .from('saloes')
+          .select('id')
+          .eq('dono_id', user.id)
+          .order('created_at', ascending: false) // <--- O termo correto é este
+          .limit(1)
+          .maybeSingle();
+          
+      if (buscaSalao == null || buscaSalao['id'] == null) {
+        throw Exception('Salão criado, mas o sistema de segurança impediu a leitura do ID. Verifique o RLS.');
       }
 
-      // 🎯 4. Clonar Templates (O "Onboarding" Automático)
-      setState(() => mensagemStatus = 'Configurando serviços e agenda...');
-      await Supabase.instance.client.rpc(
-        'clonar_templates_para_novo_salao',
-        params: {'p_salao_id': salaoId},
-      );
+      //final String idFinalSeguro = buscaSalao['id'].toString();
+      final String idFinalSeguro = buscaSalao?['id']?.toString() ?? '';
+      debugPrint('DEBUG: ID recuperado com sucesso: $idFinalSeguro');
 
-      // 5. Vincular Salão ao Profile
+      // 4. Vincular Salão ao Profile
       await Supabase.instance.client
           .from('profiles')
-          .update({'salao_id': salaoId}).eq('id', user.id);
+          .update({'salao_id': idFinalSeguro})
+          .eq('id', user.id);
+      /*
+      // 5. Feedback e Navegação
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cadastro realizado com sucesso!')),
+        );
+        Navigator.pushReplacementNamed(context, '/home');
+      }
+      */
+      // No passo 5 do seu processo de cadastro:
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cadastro realizado com sucesso!')),
+        );
 
-      mostrarErro('Cadastro realizado com sucesso!');
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      mostrarErro(_traduzErroSupabase(e));
-    } finally {
-      if (mounted) setState(() => carregando = false);
-    }
+        // Em vez de usar a rota nomeada, passamos a página diretamente com o ID
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => HomePage(salaoId: idFinalSeguro),
+          ),
+        );
+      }      
   }
 
   bool emailValido(String email) {
@@ -144,7 +271,7 @@ class _CadastroPageState extends State<CadastroPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Criar Conta')),
-      body: SingleChildScrollView( // Adicionado para evitar overflow com teclado
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
           children: [

@@ -84,6 +84,13 @@ class _MyAppState extends State<MyApp> {
         // A rota '/' ou home será o SplashScreen definido abaixo
       },
       home: const SplashScreen(),
+      onGenerateRoute: (settings) { 
+        if (settings.name == '/home') { 
+          final salaoId = settings.arguments as String; 
+          return MaterialPageRoute( builder: (_) => HomePage(salaoId: salaoId), 
+          ); 
+        } return null; 
+      },      
     );
   }
 }

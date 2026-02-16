@@ -13,8 +13,8 @@ class ClientesPage extends StatefulWidget {
 
 class _ClientesPageState extends State<ClientesPage> {
   final ClienteService _clienteService = ClienteService();
-  late Future<List<ClienteModel>> clientesFuture;
 
+  List<ClienteModel> _clientes = [];
   String? clienteIdEditando;
   final nomeController = TextEditingController();
   final celularController = TextEditingController();
@@ -29,12 +29,11 @@ class _ClientesPageState extends State<ClientesPage> {
     _carregarClientes();
   }
 
-  void _carregarClientes() {
+  Future<void> _carregarClientes() async {
+    final lista = await _clienteService.listarPorSalao(widget.salaoId);
+    lista.sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
     setState(() {
-      clientesFuture = _clienteService.listarPorSalao(widget.salaoId).then((lista) {
-        lista.sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
-        return lista;
-      });
+      _clientes = lista;
     });
   }
 
@@ -55,7 +54,8 @@ class _ClientesPageState extends State<ClientesPage> {
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(cliente == null ? 'Novo Cliente' : 'Editar Cliente', style: Theme.of(context).textTheme.titleMedium),
+        title: Text(cliente == null ? 'Novo Cliente' : 'Editar Cliente',
+            style: Theme.of(context).textTheme.titleMedium),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -83,7 +83,8 @@ class _ClientesPageState extends State<ClientesPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancelar', style: Theme.of(context).textTheme.bodyMedium),
+            child: Text('Cancelar',
+                style: Theme.of(context).textTheme.bodyMedium),
           ),
           TextButton(
             onPressed: _carregandoOperacao
@@ -95,7 +96,8 @@ class _ClientesPageState extends State<ClientesPage> {
 
                     if (nome.isEmpty || celular.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Preencha os campos obrigatórios!')),
+                        const SnackBar(
+                            content: Text('Preencha os campos obrigatórios!')),
                       );
                       return;
                     }
@@ -118,10 +120,11 @@ class _ClientesPageState extends State<ClientesPage> {
                       }
 
                       Navigator.pop(context);
-                      _carregarClientes();
+                      await _carregarClientes();
 
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Cliente salvo com sucesso!')),
+                        const SnackBar(
+                            content: Text('Cliente salvo com sucesso!')),
                       );
                     } catch (e) {
                       final mensagem = e is Exception
@@ -135,8 +138,12 @@ class _ClientesPageState extends State<ClientesPage> {
                     }
                   },
             child: _carregandoOperacao
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : Text('Salvar', style: Theme.of(context).textTheme.bodyMedium),
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : Text('Salvar',
+                    style: Theme.of(context).textTheme.bodyMedium),
           ),
         ],
       ),
@@ -147,11 +154,19 @@ class _ClientesPageState extends State<ClientesPage> {
     final confirmar = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Confirmar exclusão', style: Theme.of(context).textTheme.titleMedium),
-        content: Text('Deseja realmente excluir este cliente?', style: Theme.of(context).textTheme.bodyMedium),
+        title: Text('Confirmar exclusão',
+            style: Theme.of(context).textTheme.titleMedium),
+        content: Text('Deseja realmente excluir este cliente?',
+            style: Theme.of(context).textTheme.bodyMedium),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancelar', style: Theme.of(context).textTheme.bodyMedium)),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: Text('Excluir', style: Theme.of(context).textTheme.bodyMedium)),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text('Cancelar',
+                  style: Theme.of(context).textTheme.bodyMedium)),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text('Excluir',
+                  style: Theme.of(context).textTheme.bodyMedium)),
         ],
       ),
     );
@@ -159,7 +174,7 @@ class _ClientesPageState extends State<ClientesPage> {
     if (confirmar == true) {
       try {
         await _clienteService.excluir(id);
-        _carregarClientes();
+        await _carregarClientes();
 
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Cliente excluído com sucesso!')),
@@ -174,95 +189,108 @@ class _ClientesPageState extends State<ClientesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final clientesFiltrados = termoBusca.isEmpty
+        ? _clientes
+        : _clientes
+            .where((c) =>
+                c.nome.toLowerCase().contains(termoBusca.toLowerCase()))
+            .toList();
+
     return Scaffold(
-      appBar: AppBar(title: Text('Clientes')),
-      body: FutureBuilder<List<ClienteModel>>(
-        future: clientesFuture,
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-
-          final todosClientes = snapshot.data!;
-          final clientesFiltrados = termoBusca.isEmpty
-              ? todosClientes
-              : todosClientes.where((c) => c.nome.toLowerCase().contains(termoBusca.toLowerCase())).toList();
-
-          return Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                const SizedBox(height: 12),
-                TextField(
-                  decoration: InputDecoration(
-                    labelText: 'Buscar cliente por nome',
-                    prefixIcon: const Icon(Icons.search),
-                    border: const OutlineInputBorder(),
-                    labelStyle: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  onChanged: (value) {
-                    setState(() => termoBusca = value);
-                  },
-                ),
-                const SizedBox(height: 12),
-                Expanded(
-                  child: clientesFiltrados.isEmpty
-                      ? Center(child: Text('Nenhum cliente encontrado.', style: Theme.of(context).textTheme.bodyMedium))
-                      : ListView.builder(
-                          itemCount: clientesFiltrados.length,
-                          itemBuilder: (context, index) {
-                            final cliente = clientesFiltrados[index];
-                            return Card(
-                              elevation: 3,
-                              margin: const EdgeInsets.symmetric(vertical: 8),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            cliente.nome,
-                                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(cliente.celular, style: Theme.of(context).textTheme.bodyMedium),
-                                          if (cliente.email.isNotEmpty) ...[
-                                            const SizedBox(height: 2),
-                                            Text(cliente.email, style: Theme.of(context).textTheme.bodyMedium),
-                                          ],
-                                        ],
+      appBar: AppBar(title: const Text('Clientes')),
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            TextField(
+              decoration: InputDecoration(
+                labelText: 'Buscar cliente por nome',
+                prefixIcon: const Icon(Icons.search),
+                border: const OutlineInputBorder(),
+                labelStyle: Theme.of(context).textTheme.bodyMedium,
+              ),
+              onChanged: (value) {
+                setState(() => termoBusca = value);
+              },
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: clientesFiltrados.isEmpty
+                  ? Center(
+                      child: Text('Nenhum cliente encontrado.',
+                          style: Theme.of(context).textTheme.bodyMedium))
+                  : ListView.builder(
+                      itemCount: clientesFiltrados.length,
+                      itemBuilder: (context, index) {
+                        final cliente = clientesFiltrados[index];
+                        return Card(
+                          elevation: 3,
+                          margin: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        cliente.nome,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleMedium
+                                            ?.copyWith(
+                                                fontWeight: FontWeight.bold),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit),
-                                          tooltip: 'Editar',
-                                          onPressed: () => _mostrarFormulario(cliente: cliente),
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete, color: Colors.red),
-                                          tooltip: 'Excluir',
-                                          onPressed: () => _excluirCliente(cliente.id),
-                                        ),
+                                      const SizedBox(height: 4),
+                                      Text(cliente.celular,
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium),
+                                      if (cliente.email.isNotEmpty) ...[
+                                        const SizedBox(height: 2),
+                                        Text(cliente.email,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .bodyMedium),
                                       ],
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit),
+                                      tooltip: 'Editar',
+                                      onPressed: () =>
+                                          _mostrarFormulario(cliente: cliente),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete,
+                                          color: Colors.red),
+                                      tooltip: 'Excluir',
+                                      onPressed: () =>
+                                          _excluirCliente(cliente.id),
                                     ),
                                   ],
                                 ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
-          );
-        },
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _mostrarFormulario(),

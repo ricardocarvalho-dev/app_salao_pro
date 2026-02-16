@@ -111,6 +111,7 @@ class _EspecialidadesPageState extends State<EspecialidadesPage> {
     );
   }
 
+  /*
   Future<void> excluirEspecialidade(String id) async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -140,6 +141,56 @@ class _EspecialidadesPageState extends State<EspecialidadesPage> {
         debugPrint('Erro ao excluir especialidade: $e');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erro ao excluir: $e')),
+        );
+      }
+    }
+  }
+  */
+  Future<void> excluirEspecialidade(String id) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Confirmar exclusão'),
+          content: const Text('Deseja realmente excluir esta especialidade?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Excluir'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmar == true) {
+      try {
+        await service.excluir(id);
+        await carregarEspecialidades();
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Especialidade excluída com sucesso!')),
+        );
+      } catch (e) {
+        debugPrint('Erro ao excluir especialidade: $e');
+
+        // 🔹 Tratamento personalizado
+        /*
+        final mensagem = e.toString().contains('serviços vinculados')
+            ? 'Existem serviços vinculados a esta especialidade. Exclua ou edite os serviços antes.'
+            : 'Erro ao excluir especialidade.';
+        */         
+        // 🔹 Se o backend retornar mensagem clara, usamos ela 
+        final mensagem = e.toString().contains('foreign key') 
+            ? 'Existem serviços vinculados a esta especialidade. Exclua ou edite os serviços antes.' 
+            : 'Erro ao excluir especialidade.';            
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mensagem)),
         );
       }
     }
