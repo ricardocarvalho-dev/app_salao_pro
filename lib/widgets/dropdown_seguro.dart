@@ -46,6 +46,8 @@ class DropdownSeguro<T> extends StatelessWidget {
     final List<DropdownMenuItem<String?>> dropdownItems = [];
 
     /// Opção vazia real
+    ///
+    /*
     if (mostrarOpcaoVazia) {
       dropdownItems.add(
         DropdownMenuItem<String?>(
@@ -60,6 +62,27 @@ class DropdownSeguro<T> extends StatelessWidget {
         ),
       );
     }
+    */  
+
+    // Adiciona a opção vazia ou "Selecione" quando a lista está vazia
+    ///*
+    if (itensUnicos.isEmpty || mostrarOpcaoVazia) {
+      dropdownItems.add(
+        //DropdownMenuItem<String?>(
+        DropdownMenuItem<String?>(
+          value: null, // Valor nulo para indicar "Sem Seleção"
+          //value: '', // usar string vazia em vez de null
+          child: Text(
+            textoOpcaoVazia, // Aqui usamos o texto customizado da opção vazia
+            style: TextStyle(
+              color: Theme.of(context).hintColor,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      );
+    } 
+    //*/   
 
     /// Itens normais
     dropdownItems.addAll(
@@ -73,12 +96,31 @@ class DropdownSeguro<T> extends StatelessWidget {
 
     return DropdownButtonFormField<String?>(
       isExpanded: true,
-      value: valueValido ? value : null,
+      initialValue: valueValido ? value : null,
       hint: Text(hintText),
       decoration: InputDecoration(
         labelText: labelText,
       ),
-      items: dropdownItems,
+      //items: dropdownItems,
+      items: [ 
+        if (mostrarOpcaoVazia || itensUnicos.isEmpty) 
+          DropdownMenuItem<String?>( 
+            value: null, 
+            child: Text( 
+              textoOpcaoVazia, 
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith( 
+                color: Theme.of(context).hintColor, 
+                fontStyle: FontStyle.italic, 
+              ), 
+            ), 
+          ), 
+        ...itensUnicos.map( 
+          (item) => DropdownMenuItem<String?>( 
+            value: getId(item), 
+            child: Text(getLabel(item)),
+          ), 
+        ), 
+      ],      
       onChanged: enabled ? onChanged : null,
     );
   }

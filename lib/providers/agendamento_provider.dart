@@ -38,6 +38,8 @@ class AgendamentoState {
   final Map<String, String> mapaServicos;
   final Map<String, String> mapaClientes;
 
+  final DateTime? lastFetch; // 🔹 novo campo para controlar cache
+
   const AgendamentoState({
     this.clienteId,
     this.profissionalSelecionado,
@@ -54,6 +56,7 @@ class AgendamentoState {
     this.mapaServicos = const {},
     this.mapaClientes = const {},
     this.clienteNome,
+    this.lastFetch,
   });
 
   AgendamentoState copyWith({
@@ -72,6 +75,7 @@ class AgendamentoState {
     Map<String, String>? mapaServicos,
     Map<String, String>? mapaClientes,
     String? clienteNome,
+    DateTime? lastFetch,
   }) {
     return AgendamentoState(
       clienteId: clienteId ?? this.clienteId,
@@ -321,6 +325,7 @@ void selecionarServico(String? servicoId) {
   // ======================
   // SETTERS PARA LISTAS (CORRIGIDOS PARA POPULAR OS MAPAS)
   // ======================
+  /*
   void setClientes(List<Map<String, dynamic>> lista) {
     state = state.copyWith(
       clientes: lista,
@@ -329,10 +334,32 @@ void selecionarServico(String? servicoId) {
       },
     );
   }
+  */
+  void setClientes(List<Map<String, dynamic>> lista) {
+    state = state.copyWith(
+      clientes: lista,
+      clienteId: lista.isNotEmpty ? state.clienteId : null, // força null se vazio
+      mapaClientes: {
+        for (var c in lista) c['id'].toString(): c['nome'].toString()
+      },
+    );
+  }
+
+  /*
+  void setProfissionais(List<Map<String, dynamic>> lista) {
+    state = state.copyWith(
+      profissionais: lista,
+      mapaProfissionais: {
+        for (var p in lista) p['id'].toString(): p['nome'].toString()
+      },
+    );
+  }
+  */
 
   void setProfissionais(List<Map<String, dynamic>> lista) {
     state = state.copyWith(
       profissionais: lista,
+      profissionalSelecionado: lista.isNotEmpty ? state.profissionalSelecionado : null, // força null se vazio
       mapaProfissionais: {
         for (var p in lista) p['id'].toString(): p['nome'].toString()
       },
