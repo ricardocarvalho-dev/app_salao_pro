@@ -7,6 +7,8 @@ import 'package:app_salao_pro/services/agendamento_service.dart';
 import 'package:app_salao_pro/pages/agendamento_movel.dart';
 import 'package:app_salao_pro/providers/agendamento_provider.dart';
 import 'package:app_salao_pro/providers/agenda_filtro_provider.dart';
+import 'package:app_salao_pro/pages/agenda_skeleton.dart';
+
 
 class AgendaPage extends ConsumerStatefulWidget {
   final String salaoId;
@@ -28,6 +30,8 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
 
   late AgendamentoService service;
   List<AgendamentoModel> agendamentos = [];
+
+  bool isLoading = false; // 🔹 adiciona aqui
 
   @override
   void initState() {
@@ -54,6 +58,7 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
     super.dispose();
   }
 
+  /*
   Future<void> carregarAgendamentos() async {
     if (_selectedDay == null) return;
 
@@ -71,6 +76,34 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
       }
     } catch (e) {
       debugPrint('Erro ao carregar agendamentos: $e');
+    }
+  }
+  */
+  Future<void> carregarAgendamentos() async {
+    if (_selectedDay == null) return;
+
+    final filtros = ref.read(agendaFiltroProvider);
+
+    setState(() => isLoading = true);
+
+    try {
+      final lista = await service.getAgendamentos(
+        _selectedDay!,
+        profissionalId: filtros.profissionalId,
+        servicoId: filtros.servicoId,
+      );
+
+      if (mounted) {
+        setState(() {
+          agendamentos = lista;
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() => isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Erro ao carregar agendamentos: $e")),
+      );
     }
   }
 
@@ -105,13 +138,13 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
 
     return Column(
       children: [
+        /*
         TableCalendar(
           locale: 'pt_BR',
           firstDay: DateTime.utc(2020, 1, 1),
           lastDay: DateTime.utc(2030, 12, 31),
           focusedDay: _focusedDay,
-          selectedDayPredicate: (day) =>
-              isSameDay(_selectedDay, day),
+          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
           calendarFormat: CalendarFormat.week,
           availableCalendarFormats: const {
             CalendarFormat.week: 'Semana',
@@ -123,6 +156,88 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
             });
             carregarAgendamentos();
           },
+          
+          // 🔹 1. Aumenta a altura da linha para dar espaço vertical
+          rowHeight: 62, 
+
+          // 🔹 2. Ajusta o estilo dos dias com 'height' para centralizar a fonte
+          daysOfWeekStyle: const DaysOfWeekStyle(
+            weekdayStyle: TextStyle(
+              fontSize: 12, 
+              color: Colors.black87,
+              height: 1.5, // 👈 Isso empurra o texto para baixo
+            ),
+            weekendStyle: TextStyle(
+              fontSize: 12, 
+              color: Colors.redAccent,
+              height: 1.5,
+            ),
+          ),
+
+          // 🔹 3. Dá mais espaço entre o mês e os dias da semana
+          headerStyle: const HeaderStyle(
+            formatButtonVisible: false,
+            titleCentered: true,
+            leftChevronPadding: EdgeInsets.zero,
+            rightChevronPadding: EdgeInsets.zero,
+            headerPadding: EdgeInsets.only(top: 8.0, bottom: 14.0), // 👈 Aumentamos o bottom
+          ),
+          enabledDayPredicate: (day) => true,
+        ),        
+        */
+
+        // 🔹 Envolvemos em um SizedBox para garantir que o widget tenha espaço para crescer
+        SizedBox(
+          height: 140, // Altura total suficiente para header + dias + números
+          child: TableCalendar(
+            locale: 'pt_BR',
+            firstDay: DateTime.utc(2020, 1, 1),
+            lastDay: DateTime.utc(2030, 12, 31),
+            focusedDay: _focusedDay,
+            selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+            calendarFormat: CalendarFormat.week,
+            availableCalendarFormats: const {
+              CalendarFormat.week: 'Semana',
+            },
+            
+            // 🔹 ESTA É A CHAVE: Define a altura específica para a linha dos dias (seg, ter...)
+            daysOfWeekHeight: 25, 
+            
+            // 🔹 Altura para a linha dos números
+            rowHeight: 52,
+
+            daysOfWeekStyle: const DaysOfWeekStyle(
+              weekdayStyle: TextStyle(
+                fontSize: 13, 
+                color: Colors.black87,
+                // height: 1.1 ajuda a baixar um pouco a fonte dentro do espaço
+                height: 1.1, 
+              ),
+              weekendStyle: TextStyle(
+                fontSize: 13, 
+                color: Colors.redAccent,
+                height: 1.1,
+              ),
+            ),
+
+            headerStyle: const HeaderStyle(
+              formatButtonVisible: false,
+              titleCentered: true,
+              leftChevronPadding: EdgeInsets.zero,
+              rightChevronPadding: EdgeInsets.zero,
+              // Ajustamos o padding para não empurrar tudo para cima
+              headerPadding: EdgeInsets.only(bottom: 10.0), 
+            ),
+
+            onDaySelected: (selectedDay, focusedDay) {
+              setState(() {
+                _selectedDay = selectedDay;
+                _focusedDay = focusedDay;
+              });
+              carregarAgendamentos();
+            },
+            enabledDayPredicate: (day) => true,
+          ),
         ),
 
         const SizedBox(height: 16),
@@ -158,7 +273,7 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
 
         /// 🔹 SERVIÇO
         DropdownButtonFormField<String?>(
-          value: filtros.servicoId,
+          initialValue: filtros.servicoId,
           decoration: const InputDecoration(labelText: 'Serviço'),
           items: [
             const DropdownMenuItem(
@@ -184,13 +299,33 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
         ),
 
         const SizedBox(height: 16),
-
+        /*
         ElevatedButton.icon(
           icon: const Icon(Icons.add),
           label: const Text('Novo Agendamento'),
           onPressed: () async {
             if (_selectedDay == null) return;
 
+            final hoje = DateTime.now();
+            final dataHoje = DateTime(hoje.year, hoje.month, hoje.day);
+            final dataSelecionada = DateTime(
+              _selectedDay!.year,
+              _selectedDay!.month,
+              _selectedDay!.day,
+            );
+
+            if (dataSelecionada.isBefore(dataHoje)) {
+              // 🔹 Feedback visual para o usuário
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Não é possível criar agendamentos em datas passadas."),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              return;
+            }
+
+            // 🔹 Só abre a página de agendamento se for hoje ou futuro
             final criado = await Navigator.push<bool>(
               context,
               MaterialPageRoute(
@@ -207,10 +342,56 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
             }
           },
         ),
+        */
+        ElevatedButton.icon(
+          icon: const Icon(Icons.add),
+          label: const Text('Novo Agendamento'),
+          onPressed: () async {
+            if (_selectedDay == null) return;
+
+            final hoje = DateTime.now();
+            final dataHoje = DateTime(hoje.year, hoje.month, hoje.day);
+            final dataSelecionada = DateTime(
+              _selectedDay!.year,
+              _selectedDay!.month,
+              _selectedDay!.day,
+            );
+
+            if (dataSelecionada.isBefore(dataHoje)) {
+              // 🔹 Feedback visual para o usuário
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Não é possível criar agendamentos em datas passadas."),
+                  duration: Duration(seconds: 2),
+                ),
+              );
+              return;
+            }
+
+            // 🔹 Só abre a página de agendamento se for hoje ou futuro
+            final criado = await Navigator.push<bool>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AgendamentoMovelPage(
+                  salaoId: widget.salaoId,
+                  dataSelecionada: _selectedDay!,
+                  clienteId: null,
+                ),
+              ),
+            );
+
+            if (criado == true) {
+              await carregarAgendamentos();
+            }
+          },
+        ),
+
+
       ],
     );
   }
 
+  /*
   Widget _buildLista() {
     if (agendamentos.isEmpty) {
       return const Center(
@@ -225,18 +406,7 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
 
         final hora =
             '${ag.hora.hour.toString().padLeft(2, '0')}:${ag.hora.minute.toString().padLeft(2, '0')}';
-        /*
-        return ListTile(
-          title: Text('$hora — ${ag.clienteNome ?? 'Cliente'}'),
-          subtitle: Text(
-            '${ag.servicoNome ?? 'Serviço'} • ${ag.profissionalNome ?? 'Por serviço'}',
-          ),
-          trailing: IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: () => excluirAgendamento(ag.id),
-          ),
-        );
-        */ 
+
         return ListTile(
           title: Text(
             '$hora — ${ag.clienteNome ?? ''}',
@@ -251,6 +421,39 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
           ),
         );
         
+      },
+    );
+  }
+  */
+  Widget _buildLista() {
+    if (isLoading) {
+      return AgendaSkeleton(); // componente visual de skeleton
+    }
+
+    if (agendamentos.isEmpty) {
+      return const Center(
+        child: Text('Nenhum agendamento para este dia.'),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: agendamentos.length,
+      itemBuilder: (_, i) {
+        final ag = agendamentos[i];
+        final hora =
+            '${ag.hora.hour.toString().padLeft(2, '0')}:${ag.hora.minute.toString().padLeft(2, '0')}';
+
+        return ListTile(
+          title: Text('$hora — ${ag.clienteNome ?? ''}'),
+          subtitle: Text(
+            '${ag.servicoNome ?? ''} • '
+            '${ag.profissionalNome != null ? ag.profissionalNome! : 'Por serviço'}',
+          ),
+          trailing: IconButton(
+            icon: const Icon(Icons.delete),
+            onPressed: () => excluirAgendamento(ag.id),
+          ),
+        );
       },
     );
   }
