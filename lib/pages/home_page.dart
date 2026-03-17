@@ -11,6 +11,12 @@ import 'editar_salao_page.dart';
 import 'perfil_page.dart';
 import 'package:app_salao_pro/widgets/theme_selector.dart';
 import 'dart:async';
+import 'package:app_salao_pro/pages/central_mensagens_page.dart';
+import 'package:app_salao_pro/services/contato_service.dart';
+// 🔹 ADICIONADO:
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:app_salao_pro/main.dart';
+import 'package:app_salao_pro/pages/agendamento_movel.dart';
 
 
 class HomePage extends StatefulWidget {
@@ -36,54 +42,48 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   
   // 🛡️ Trava de segurança para evitar múltiplas chamadas simultâneas
   bool _estaCarregandoProcesso = false;
-  /*
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _load();
-  }
-  */
-  /*
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _load();
-
-    // 🔹 Refresh automático a cada 30 segundos enquanto estiver configurando
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (mensagemStatus != null) {
-        _load();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _refreshTimer?.cancel(); // 🔹 cancela o timer ao sair da tela
-    super.dispose();
-  }
-
-  /// 🔁 Reage quando o app volta do background (Resolve o travamento ao retornar)
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      debugPrint('🔄 Home retomada do segundo plano - Validando estado...');
-      _load();
-    }
-  }
-  */
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     
+    // 🎯 1. VERIFICAÇÃO DE NOTIFICAÇÃO PENDENTE (O Pulo do Gato)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (notificacaoPendente != null) {
+        final data = notificacaoPendente!.data;
+        notificacaoPendente = null; // Esvazia a mochila para não repetir
+
+        try {
+          final dataAgendamento = DateTime.parse(data['dataAgendamento']);
+          
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => AgendamentoMovelPage(
+                salaoId: data['salaoId'],
+                dataSelecionada: dataAgendamento,
+                clienteId: data['clienteId'],
+                profissionalId: (data['profissionalId']?.toString().isEmpty ?? true) 
+                    ? null 
+                    : data['profissionalId'],
+                servicoId: data['servicoId'],
+                modoAgendamento: 'por_servico',
+              ),
+            ),
+          );
+        } catch (e) {
+          debugPrint("❌ Erro ao processar notificação na Home: $e");
+        }
+      }
+    });
+    
     // 1. Tenta carregar imediatamente ao abrir
     _load();
 
-    // 2. 🔹 Refresh AGRESSIVO (Mude de 30 para 2 ou 3 segundos)
+    // 2. 🔹 NOVO: Configura o recebimento de notificações para este celular
+    _configurarPushNotifications();
+
+    // 3. 🔹 Refresh AGRESSIVO (Mude de 30 para 2 ou 3 segundos)
     // Isso garante que assim que o banco terminar, o app perceba rápido.
     _refreshTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (mensagemStatus != null && mounted) {
@@ -110,46 +110,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }  
 
-  /// 🔐 Load protegido contra travamento, timeout e estresse de cliques
-  /*
-  Future<void> _load() async {
-    // Se já estiver carregando ou o widget saiu da tela, ignora a nova chamada
-    if (_estaCarregandoProcesso || !mounted) return;
-
-    setState(() {
-      _estaCarregandoProcesso = true;
-      carregando = true;
-      erro = false;
-    });
-
-    try {
-      // Tenta executar a validação, mas aborta se demorar mais de 10 segundos
-      await Future.any([
-        _validarAcesso(),
-        Future.delayed(
-          const Duration(seconds: 10),
-          () => throw Exception('Timeout na conexão com o servidor'),
-        ),
-      ]);
-
-      if (!mounted) return;
-      setState(() => carregando = false);
-    } catch (e) {
-      debugPrint('Erro no load da Home: $e');
-
-      if (!mounted) return;
-      setState(() {
-        carregando = false;
-        erro = true;
-      });
-    } finally {
-      // Garante que a trava seja liberada para futuras tentativas
-      if (mounted) {
-        _estaCarregandoProcesso = false;
-      }
-    }
-  }
-  */
   Future<void> _load() async {
     // Se já estiver carregando ou o widget saiu da tela, ignora a nova chamada
     if (_estaCarregandoProcesso || !mounted) return;
@@ -198,29 +158,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  /*
-  Future<void> _validarAcesso() async {
-    final client = Supabase.instance.client;
-    final user = client.auth.currentUser;
-    
-    // Se o usuário perdeu a sessão enquanto estava em background
-    if (user == null || widget.salaoId.isEmpty) {
-      _voltarParaLogin();
-      throw Exception('Sessão inválida ou expirada');
-    }
-
-    await verificarPermissao();
-    await carregarDadosSalao();
-    // 🔹 checa se já tem slots
-    final inicializado = await verificarInicializacaoSalao(widget.salaoId);
-    if (!inicializado) {
-      setState(() {
-        mensagemStatus = 'Seu salão está sendo configurado...';
-      });
-    }
-
-  }
-  */
   Future<void> _validarAcesso() async {
     final client = Supabase.instance.client;
     final user = client.auth.currentUser;
@@ -258,31 +195,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       return;
     }
 
-    /*
-    // 5. Se chegamos aqui, temos um ID válido!
-    await verificarPermissao();
-    await carregarDadosSalaoComId(idParaUso);  
-    
-    final inicializado = await verificarInicializacaoSalao(idParaUso);
-    if (!inicializado) {
-      if (mounted) {
-        setState(() {
-          mensagemStatus = 'Seu salão está sendo configurado...';
-        });
-      }
-    } else {
-      // Se já inicializou, limpamos a mensagem de status para mostrar o painel
-      if (mounted) {
-        setState(() {
-          mensagemStatus = null;
-        });
-      }
-    }
-    */
-    // 5. Se chegamos aqui, temos um ID válido!
-    // IMPORTANTE: Só carregamos os dados pesados e limpamos o status 
-    // SE o salão já tiver terminado a configuração no banco.
-    
     final inicializado = await verificarInicializacaoSalao(idParaUso);
     
     if (!inicializado) {
@@ -387,6 +299,38 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return (count.count ?? 0) > 0;
   }
 
+  // 🔹 NOVO MÉTODO ADICIONADO:
+  Future<void> _configurarPushNotifications() async {
+    try {
+      final fcm = FirebaseMessaging.instance;
+      final supabase = Supabase.instance.client;
+
+      // Solicita permissão (especialmente para Android 13+ e iOS)
+      NotificationSettings settings = await fcm.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        String? token = await fcm.getToken();
+        final userId = supabase.auth.currentUser?.id;
+
+        if (token != null && userId != null) {
+          // Salva o token na tabela fcm_tokens que configuramos no DBeaver
+          await supabase.from('fcm_tokens').upsert({
+            'usuario_id': userId,
+            'token': token,
+            'dispositivo_tipo': 'android',
+          }, onConflict: 'token');
+          debugPrint('✅ Push Token registrado com sucesso!');
+        }
+      }
+    } catch (e) {
+      debugPrint('Erro ao configurar push: $e');
+    }
+  }
+
   void _voltarParaLogin() {
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -404,454 +348,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     return (partes[0][0] + partes[1][0]).toUpperCase();
   }
 
-  /*
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-
-    // ESTADO: CARREGANDO
-    if (carregando) {
-      return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text("Sincronizando dados..."),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // ESTADO: ERRO (Evita que o app precise ser reinstalado)
-    if (erro) {
-      return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.cloud_off, size: 80, color: Colors.orange),
-                const SizedBox(height: 16),
-                const Text(
-                  "Não conseguimos conectar ao servidor.",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  "Isso pode acontecer por instabilidade na rede ao retornar ao aplicativo.",
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: _load,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text("Tentar novamente"),
-                ),
-                TextButton(
-                  onPressed: () => logout(context),
-                  child: const Text("Sair e fazer login novamente"),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    // ESTADO: PRONTO
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Painel do Salão',
-          style: t.textTheme.titleLarge?.copyWith(
-            color: t.colorScheme.onPrimary,
-          ),
-        ),
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: t.colorScheme.primary),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    height: 70,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: logoUrl != null && logoUrl!.isNotEmpty
-                          ? Image.network(logoUrl!, fit: BoxFit.contain)
-                          : Container(
-                              color: t.colorScheme.onPrimary.withOpacity(0.15),
-                              alignment: Alignment.center,
-                              child: Text(
-                                _iniciaisSalao(nomeSalao),
-                                style: t.textTheme.headlineMedium?.copyWith(
-                                  color: t.colorScheme.onPrimary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    nomeSalao,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: t.textTheme.titleLarge?.copyWith(
-                      color: t.colorScheme.onPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  if (emailDono != null)
-                    Text(
-                      emailDono!,
-                      textAlign: TextAlign.center,
-                      style: t.textTheme.bodySmall?.copyWith(
-                        color: t.colorScheme.onPrimary.withOpacity(0.8),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const ListTile(
-              leading: Icon(Icons.brightness_6_outlined),
-              title: Text('Tema do aplicativo'),
-              subtitle: ThemeSelector(),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Configurações do salão'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => EditarSalaoPage(salaoId: widget.salaoId),
-                  ),
-                ).then((_) => _load());
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Perfil'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PerfilPage()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Sair'),
-              onTap: () => logout(context),
-            ),
-          ],
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          _botaoNavegacao('Dashboard', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => DashboardPage(salaoId: widget.salaoId),
-              ),
-            );
-          }),
-          _botaoNavegacao('Especialidades', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => EspecialidadesPage(salaoId: widget.salaoId),
-              ),
-            );
-          }),
-          _botaoNavegacao('Serviços', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => serv.ServicosPage(salaoId: widget.salaoId),
-              ),
-            );
-          }),
-          _botaoNavegacao('Profissionais', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => prof.ProfissionaisPage(salaoId: widget.salaoId),
-              ),
-            );
-          }),
-          _botaoNavegacao('Clientes', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ClientesPage(salaoId: widget.salaoId),
-              ),
-            );
-          }),
-          _botaoNavegacao('Agenda', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => AgendaPage(
-                  salaoId: widget.salaoId,
-                  dataSelecionada: DateTime.now(),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-  */
-  /*
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context);
-
-    // ESTADO: CARREGANDO
-    if (carregando) {
-      return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text("Sincronizando dados..."),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // ESTADO: ERRO (Evita que o app precise ser reinstalado)
-    if (erro) {
-      return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.cloud_off, size: 80, color: Colors.orange),
-                const SizedBox(height: 16),
-                const Text(
-                  "Não conseguimos conectar ao servidor.",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  "Isso pode acontecer por instabilidade na rede ao retornar ao aplicativo.",
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: _load,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text("Tentar novamente"),
-                ),
-                TextButton(
-                  onPressed: () => logout(context),
-                  child: const Text("Sair e fazer login novamente"),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    // 🔹 ESTADO: CONFIGURAÇÃO EM ANDAMENTO
-    if (mensagemStatus != null) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text(mensagemStatus!),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // ESTADO: PRONTO
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          'Painel do Salão',
-          style: t.textTheme.titleLarge?.copyWith(
-            color: t.colorScheme.onPrimary,
-          ),
-        ),
-      ),
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: t.colorScheme.primary),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    height: 70,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: logoUrl != null && logoUrl!.isNotEmpty
-                          ? Image.network(logoUrl!, fit: BoxFit.contain)
-                          : Container(
-                              color: t.colorScheme.onPrimary.withOpacity(0.15),
-                              alignment: Alignment.center,
-                              child: Text(
-                                _iniciaisSalao(nomeSalao),
-                                style: t.textTheme.headlineMedium?.copyWith(
-                                  color: t.colorScheme.onPrimary,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    nomeSalao,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: t.textTheme.titleLarge?.copyWith(
-                      color: t.colorScheme.onPrimary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  if (emailDono != null)
-                    Text(
-                      emailDono!,
-                      textAlign: TextAlign.center,
-                      style: t.textTheme.bodySmall?.copyWith(
-                        color: t.colorScheme.onPrimary.withOpacity(0.8),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            const ListTile(
-              leading: Icon(Icons.brightness_6_outlined),
-              title: Text('Tema do aplicativo'),
-              subtitle: ThemeSelector(),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Configurações do salão'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => EditarSalaoPage(salaoId: widget.salaoId),
-                  ),
-                ).then((_) => _load());
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Perfil'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PerfilPage()),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.logout),
-              title: const Text('Sair'),
-              onTap: () => logout(context),
-            ),
-          ],
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          _botaoNavegacao('Dashboard', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => DashboardPage(salaoId: widget.salaoId),
-              ),
-            );
-          }),
-          _botaoNavegacao('Especialidades', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => EspecialidadesPage(salaoId: widget.salaoId),
-              ),
-            );
-          }),
-          _botaoNavegacao('Serviços', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => serv.ServicosPage(salaoId: widget.salaoId),
-              ),
-            );
-          }),
-          _botaoNavegacao('Profissionais', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => prof.ProfissionaisPage(salaoId: widget.salaoId),
-              ),
-            );
-          }),
-          _botaoNavegacao('Clientes', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ClientesPage(salaoId: widget.salaoId),
-              ),
-            );
-          }),
-          _botaoNavegacao('Agenda', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => AgendaPage(
-                  salaoId: widget.salaoId,
-                  dataSelecionada: DateTime.now(),
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-  */
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context);
@@ -1030,6 +526,43 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
+        // 🚀 NOVO: Botão de Chatbot (Funcionalidade Premium)
+          /*_botaoNavegacao('💬 Central do Chatbot', () {
+            Navigator.pushNamed(context, '/central-mensagens');
+          }, isPremium: true), // Adicionamos um parâmetro opcional para destaque
+          */
+          /*
+          _botaoNavegacao('💬 Central do Chatbot', () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CentralMensagensPage()),
+            );
+          }, isPremium: true), 
+          */         
+          _botaoNavegacao('💬 Central do Chatbot', () async {
+            // 1. Solicita a permissão (operação assíncrona)
+            bool permissaoOk = await ContatoService.pedirPermissao();
+
+            // 2. O SEGREDO: Verifica se o 'context' ainda é válido após o 'await'
+            if (!context.mounted) return; 
+
+            if (!permissaoOk) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Sem permissão, nomes não serão exibidos.')),
+              );
+            }
+            
+            // 3. Navega com segurança
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CentralMensagensPage(salaoId: idSeguro),
+              ),
+            );
+          }, isPremium: true),
+
+          const Divider(height: 32),          
+          
           _botaoNavegacao('Dashboard', () {
             Navigator.push(
               context,
@@ -1086,6 +619,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
+  /*
   Widget _botaoNavegacao(String texto, VoidCallback onPressed) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -1098,4 +632,70 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       ),
     );
   }
+  */
+  /*
+  Widget _botaoNavegacao(String texto, VoidCallback onPressed, {bool isPremium = false}) {
+      final t = Theme.of(context); // Agora vamos usar o 't'
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: SizedBox(
+          width: double.infinity,
+          height: 55,
+          child: ElevatedButton(
+            onPressed: onPressed,
+            style: isPremium 
+              ? ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade600,
+                  foregroundColor: Colors.white,
+                  elevation: 4,
+                ) 
+              : ElevatedButton.styleFrom(
+                  // Aqui usamos o 't' para manter o padrão do seu tema nos botões normais
+                  backgroundColor: t.colorScheme.primaryContainer, 
+                  foregroundColor: t.colorScheme.onPrimaryContainer,
+                ),
+            child: Text(
+              texto,
+              style: TextStyle(
+                fontWeight: isPremium ? FontWeight.bold : FontWeight.normal,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    */
+    Widget _botaoNavegacao(String texto, VoidCallback onPressed, {bool isPremium = false}) {
+      final t = Theme.of(context);
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: SizedBox(
+          width: double.infinity,
+          height: 58, // Aumentei de 55 para 58 para dar mais margem de segurança no Android
+          child: ElevatedButton(
+            onPressed: onPressed,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isPremium ? Colors.green.shade600 : t.colorScheme.primaryContainer,
+              foregroundColor: isPremium ? Colors.white : t.colorScheme.onPrimaryContainer,
+              elevation: isPremium ? 4 : 0,
+              // Ajustamos o padding interno para garantir que o texto não encoste no fundo
+              padding: const EdgeInsets.symmetric(vertical: 8), 
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(
+              texto,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontWeight: isPremium ? FontWeight.bold : FontWeight.normal,
+                fontSize: 16,
+                // O 'height' ajuda a centralizar a fonte verticalmente e evita o corte do 'g' e 'p'
+                height: 1.2, 
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
 }
