@@ -141,6 +141,8 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
           profissionalId: profissionalValido,
         );
 
+        if (!mounted) return;
+
         slots = preview.map((row) {
           return HorarioSlot(
             id: 'preview_${row['hora']}',
@@ -153,6 +155,7 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
         // ==========================
         // 🟢 GRADE REAL (≤ D+30)
         // ==========================
+        /*
         final supabase = Supabase.instance.client;
 
         var query = supabase
@@ -190,12 +193,50 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
             passado: dtSlot.isBefore(now),
           );
         }).toList();
+
+      */
+      // ==========================
+      // 🟢 GRADE REAL (≤ D+30) - USANDO SERVICE
+      // ==========================
+      final resp = await agendamentoService.buscarSlotsGradeReal(
+        servicoId: sId,
+        data: dataSelecionada,
+        profissionalId: profissionalValido,
+      );
+
+      if (!mounted) return;
+
+      final now = DateTime.now();
+
+      slots = resp.map((h) {
+        final partes = h['horario'].toString().split(':');
+
+        final dtSlot = DateTime(
+          dataSelecionada.year,
+          dataSelecionada.month,
+          dataSelecionada.day,
+          int.parse(partes[0]),
+          int.parse(partes[1]),
+        );
+
+        return HorarioSlot(
+          id: h['id'].toString(),
+          hora:
+              '${partes[0].padLeft(2, '0')}:${partes[1].padLeft(2, '0')}',
+          ocupado: h['ocupado'] == true,
+          passado: dtSlot.isBefore(now),
+        );
+      }).toList();
+
       }
 
       slots.sort((a, b) => a.hora.compareTo(b.hora));
       ref.read(agendamentoProvider.notifier).setHorariosDisponiveis(slots);
+      if (!mounted) return;
+
     } catch (e) {
       debugPrint('Erro ao carregar horários: $e');
+      if (!mounted) return;
       ref.read(agendamentoProvider.notifier).setHorariosDisponiveis([]);
     } finally {
       if (mounted) setState(() => buscandoSlots = false);
@@ -240,6 +281,7 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
           clienteId: state.clienteId!,
         );
       } else {
+        /*
         // 🔹 GRADE NORMAL
         final hora = TimeOfDay(
           hour: int.parse(partes[0]),
@@ -263,6 +305,16 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
           ref,
           context,
         );
+        */        
+        // 🔹 GRADE NORMAL - USANDO SERVIC
+        await agendamentoService.criarGradeNormal(
+          servicoId: state.servicoSelecionado!,
+          profissionalId: state.profissionalSelecionado,
+          data: data,
+          horario: horaStr,
+          clienteId: state.clienteId!,
+        );
+        
       }
 
       Navigator.pop(context, true);
