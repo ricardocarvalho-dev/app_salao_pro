@@ -527,18 +527,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         padding: const EdgeInsets.all(20),
         children: [
         // 🚀 NOVO: Botão de Chatbot (Funcionalidade Premium)
-          /*_botaoNavegacao('💬 Central do Chatbot', () {
-            Navigator.pushNamed(context, '/central-mensagens');
-          }, isPremium: true), // Adicionamos um parâmetro opcional para destaque
-          */
           /*
-          _botaoNavegacao('💬 Central do Chatbot', () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CentralMensagensPage()),
-            );
-          }, isPremium: true), 
-          */         
           _botaoNavegacao('💬 Central do Chatbot', () async {
             // 1. Solicita a permissão (operação assíncrona)
             bool permissaoOk = await ContatoService.pedirPermissao();
@@ -562,6 +551,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
           }, isPremium: true),
 
           const Divider(height: 32),          
+          */
           
           _botaoNavegacao('Dashboard', () {
             Navigator.push(
