@@ -6,18 +6,30 @@ import 'package:app_salao_pro/pages/login_page.dart';
 import 'package:app_salao_pro/pages/home_page.dart';
 import 'package:app_salao_pro/pages/redefinir_senha_page.dart';
 import 'package:app_salao_pro/pages/splash_screen.dart';
+import 'package:app_salao_pro/pages/agenda_page.dart'; // 🔹 Adicionado
 import 'package:flutter/foundation.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:provider/provider.dart' as myProvider;
+import 'package:provider/provider.dart' as my_provider;
 import 'theme/theme_notifier.dart';
 import 'package:app_salao_pro/theme/tema_salao_pro.dart';
-import 'package:app_salao_pro/theme/horario_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // 🔹 Adicionado
 
 final navigatorKey = GlobalKey<NavigatorState>();
+// 🚀 Variável para guardar a notificação se o app ainda não estiver pronto
+RemoteMessage? notificacaoPendente;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 🔹 Inicialização do Firebase
+  try {
+    await Firebase.initializeApp();
+    debugPrint('🔥 Firebase inicializado com sucesso');
+  } catch (e) {
+    debugPrint('❌ Erro ao inicializar Firebase: $e');
+  }    
 
   // ✅ Carregamento do .env
   if (!kIsWeb) {
@@ -40,7 +52,6 @@ Future<void> main() async {
     throw Exception('SUPABASE_URL ou SUPABASE_ANON_KEY não encontrados');
   }
 
-  // ✅ Inicialização simplificada (Removemos o authOptions que deu erro)
   await Supabase.initialize(
     url: supabaseUrl,
     anonKey: supabaseKey,
@@ -50,7 +61,7 @@ Future<void> main() async {
 
   runApp(
     ProviderScope(
-      child: myProvider.ChangeNotifierProvider(
+      child: my_provider.ChangeNotifierProvider(
         create: (_) => ThemeNotifier(),
         child: const MyApp(),
       ),
@@ -66,30 +77,179 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+
+  @override
+  void initState() {
+    super.initState();
+    // 🔔 Configura o ouvinte de cliques em notificações
+    _setupNotificationListeners();
+  }
+
+  Future<void> _setupNotificationListeners() async {
+    // 1. App totalmente fechado
+    RemoteMessage? initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      _tratarNavegacaoNotificacao(initialMessage);
+    }
+
+    // 2. App em segundo plano
+    FirebaseMessaging.onMessageOpenedApp.listen(_tratarNavegacaoNotificacao);
+  }
+  /*
+  void _tratarNavegacaoNotificacao(RemoteMessage message) {
+    debugPrint("🔔 Notificação recebida nos dados: ${message.data}");
+    final data = message.data;
+
+    if (data['tipo'] == 'novo_agendamento') {
+      try {
+        final String dataStr = data['dataAgendamento'];
+        DateTime dataAgendamento = DateTime.parse(dataStr);
+
+        // O microtask garante que a execução espere o próximo ciclo de renderização
+        Future.microtask(() {
+          if (navigatorKey.currentState != null) {
+            navigatorKey.currentState?.push(
+              MaterialPageRoute(
+                builder: (context) => AgendamentoMovelPage(
+                  salaoId: data['salaoId'],
+                  dataSelecionada: dataAgendamento,
+                  clienteId: data['clienteId'],
+                  profissionalId: (data['profissionalId'] == null || data['profissionalId'].toString().isEmpty) 
+                      ? null 
+                      : data['profissionalId'],
+                  servicoId: data['servicoId'],
+                  modoAgendamento: 'por_servico',
+                ),
+              ),
+            );
+          } else {
+            debugPrint("⚠️ Navigator ainda não está pronto. Tentando novamente em 1 segundo...");
+            Future.delayed(const Duration(seconds: 1), () => _tratarNavegacaoNotificacao(message));
+          }
+        });
+      } catch (e) {
+        debugPrint("❌ Erro ao processar navegação: $e");
+      }
+    }
+  }
+  */
+  /* 
+  void _tratarNavegacaoNotificacao(RemoteMessage message) {
+    debugPrint("🔔 Dados recebidos no clique: ${message.data}");
+    final data = message.data;
+
+    // 1. Verificamos se o tipo é o que esperamos
+    if (data['tipo'] == 'novo_agendamento') {
+      try {
+        final String? dataStr = data['dataAgendamento'];
+        if (dataStr == null) return;
+
+        DateTime dataAgendamento = DateTime.parse(dataStr);
+
+        // 2. Chamamos a função de segurança para navegar
+        _navegarComSeguranca(data, dataAgendamento);
+      } catch (e) {
+        debugPrint("❌ Erro ao converter data: $e");
+      }
+    }
+  }  
+  */
+void _tratarNavegacaoNotificacao(RemoteMessage message) {
+    final data = message.data;
+    if (data['tipo'] == 'novo_agendamento') {
+      try {
+        final String dataStr = data['dataAgendamento'];
+        DateTime dataAgendamento = DateTime.parse(dataStr);
+
+        // 🎯 Se o Navigator ainda não existe (App abrindo), guardamos!
+        if (navigatorKey.currentState == null) {
+          notificacaoPendente = message; 
+          debugPrint("⏳ App carregando... Notificação guardada para a Home.");
+        } else {
+          // Se já estamos com o app pronto, usamos a sua função atual
+          _navegarComSeguranca(data, dataAgendamento);
+        }
+      } catch (e) {
+        debugPrint("❌ Erro: $e");
+      }
+    }
+  }
+  
+  // 🚀 Função que garante a navegação mesmo que o App esteja abrindo
+  /*
+  void _navegarComSeguranca(Map<String, dynamic> data, DateTime dataAgendamento) {
+    if (navigatorKey.currentState != null) {
+      debugPrint("✅ Navigator pronto! Navegando para o dia: $dataAgendamento");
+      
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (context) => AgendamentoMovelPage(
+            salaoId: data['salaoId'],
+            dataSelecionada: dataAgendamento,
+            clienteId: data['clienteId'],
+            profissionalId: (data['profissionalId'] == null || data['profissionalId'].toString().isEmpty) 
+                ? null 
+                : data['profissionalId'],
+            servicoId: data['servicoId'],
+            modoAgendamento: 'por_servico',
+          ),
+        ),
+      );
+    } else {
+      // Se o navigatorKey ainda for nulo, o App ainda está no Splash ou carregando.
+      // Esperamos 500ms e tentamos de novo.
+      debugPrint("⏳ Navigator ainda não disponível... tentando em 500ms");
+      Future.delayed(
+        const Duration(milliseconds: 500), 
+        () => _navegarComSeguranca(data, dataAgendamento)
+      );
+    }
+  }
+  */
+  // 🚀 Função atualizada para abrir a AGENDA e não o formulário
+  void _navegarComSeguranca(Map<String, dynamic> data, DateTime dataAgendamento) {
+    if (navigatorKey.currentState != null) {
+      debugPrint("✅ Navigator pronto! Abrindo a Agenda no dia: $dataAgendamento");
+      
+      navigatorKey.currentState?.push(
+        MaterialPageRoute(
+          builder: (context) => AgendaPage(
+            salaoId: data['salaoId'],
+            dataSelecionada: dataAgendamento, // Alinhado com o parâmetro da sua AgendaPage
+          ),
+        ),
+      );
+    } else {
+      debugPrint("⏳ Navigator ainda não disponível... tentando em 500ms");
+      Future.delayed(
+        const Duration(milliseconds: 500), 
+        () => _navegarComSeguranca(data, dataAgendamento)
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final themeNotifier = myProvider.Provider.of<ThemeNotifier>(context);
+    final themeNotifier = my_provider.Provider.of<ThemeNotifier>(context);
 
     return MaterialApp(
-      title: 'App Salão Pro',
+      title: 'Salão Pro', // 🔹 Alterado aqui também
       navigatorKey: navigatorKey,
       theme: temaSalaoPro,
       darkTheme: temaSalaoProDark,
       themeMode: themeNotifier.themeMode,
       debugShowCheckedModeBanner: false,
-      // ✅ Definindo as rotas necessárias
       routes: {
         '/login': (_) => const LoginPage(),
         '/redefinir-senha': (_) => const RedefinirSenhaPage(),
-        // A rota '/' ou home será o SplashScreen definido abaixo
       },
       home: const SplashScreen(),
       onGenerateRoute: (settings) { 
         if (settings.name == '/home') { 
           final salaoId = settings.arguments as String; 
-          return MaterialPageRoute( builder: (_) => HomePage(salaoId: salaoId), 
-          ); 
-        } return null; 
+          return MaterialPageRoute( builder: (_) => HomePage(salaoId: salaoId)); 
+        } 
+        return null; 
       },      
     );
   }

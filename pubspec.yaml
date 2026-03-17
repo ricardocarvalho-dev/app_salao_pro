@@ -49,7 +49,11 @@ dependencies:
   app_links: ^3.5.1
   provider: ^6.0.5
   uuid: ^4.5.0
-
+  fast_contacts: 5.0.1
+  permission_handler: ^11.3.1 # Para pedir permissão de ler contatos
+  firebase_messaging: ^16.1.2
+  firebase_core: ^4.5.0
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter

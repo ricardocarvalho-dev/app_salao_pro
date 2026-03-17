@@ -123,6 +123,7 @@ class _SplashScreenState extends State<SplashScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         Navigator.of(context).pushReplacementNamed('/login');
+        //Navigator.pushReplacementNamed(context, '/central-mensagens');
       }
     });
   }

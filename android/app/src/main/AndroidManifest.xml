@@ -3,9 +3,11 @@
 
     <!-- ✅ Permissão de internet para Supabase -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- ✅ Permissão de acesso para contatos - Central do Watsapp -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <application
-        android:label="app_salao_pro"
+        android:label="Salão Pro"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
@@ -47,6 +49,11 @@
                 <data android:scheme="salaopro" android:host="login-callback"/>
                 <data android:scheme="salaopro" android:host="redefinir-senha"/>
             </intent-filter>
+            
+            <intent-filter>
+                <action android:name="FLUTTER_NOTIFICATION_CLICK" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>            
         </activity>
 
         <meta-data
