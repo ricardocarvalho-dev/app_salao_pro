@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_multi_formatter/flutter_multi_formatter.dart';
 import '../models/cliente_model.dart';
 import '../services/cliente_service.dart';
+import 'package:app_salao_pro/utils/string_extensions.dart';
 
 class ClientesPage extends StatefulWidget {
   final String salaoId;
@@ -41,8 +42,30 @@ class _ClientesPageState extends State<ClientesPage> {
     if (cliente != null) {
       clienteIdEditando = cliente.id;
       nomeController.text = cliente.nome;
-      celularController.text = cliente.celular;
+      // Se o número começar com 55, removemos para a máscara do formulário não bugar
+      /*
+      String telExibicao = cliente.celular.toTelefoneElegante();      
+      if (telExibicao.startsWith('55')) {
+          telExibicao = telExibicao.substring(2);
+      } 
+      */ 
+      /*    
+      // LOGICA: Remove o 55 se existir para a máscara não bugar
+      String numeroLimpo = cliente.celular.replaceAll(RegExp(r'\D'), '');
+      if (numeroLimpo.startsWith('55')) {
+        numeroLimpo = numeroLimpo.substring(2);
+      }      
+      celularController.text = numeroLimpo; // A máscara (00) 00000-0000 fará o resto do trabalho de formatação
+      */
+      // LIMPEZA: Remove o 55 para o controller receber apenas o DDD + Numero
+      String telbanco = cliente.celular.replaceAll(RegExp(r'\D'), '');
+      if (telbanco.startsWith('55') && telbanco.length > 11) {
+        celularController.text = telbanco.substring(2);
+      } else {
+        celularController.text = telbanco;
+      }      
       emailController.text = cliente.email;
+
     } else {
       clienteIdEditando = null;
       nomeController.clear();
@@ -90,11 +113,27 @@ class _ClientesPageState extends State<ClientesPage> {
             onPressed: _carregandoOperacao
                 ? null
                 : () async {
+                    /*
+                    final celularDigitado = celularController.text.trim();
+                    // Remove tudo que não é número: ( ) - e espaços
+                    String celularLimpo = celularDigitado.replaceAll(RegExp(r'\D'), '');
+                    // Validação simples de tamanho (ex: 71999883190 tem 11 dígitos)
+                    if (celularLimpo.length < 10) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Celular incompleto!')),
+                      );
+                      return;
+                    }   
+                    // Garante que salve com 55 no banco
+                    final celularParaBanco = celularLimpo.startsWith('55') ? celularLimpo : '55$celularLimpo';                                     
                     final nome = nomeController.text.trim();
-                    final celular = celularController.text.trim();
+                    //final celular = celularController.text.trim();
+                    //final celularOriginal = celularController.text.trim();
+                    //final celularLimpo = celularOriginal.replaceAll(RegExp(r'\D'), '');
+                    //final celularParaBanco = celularLimpo.startsWith('55') ? celularLimpo : '55$celularLimpo';
                     final email = emailController.text.trim();
 
-                    if (nome.isEmpty || celular.isEmpty) {
+                    if (nome.isEmpty || celularParaBanco.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                             content: Text('Preencha os campos obrigatórios!')),
@@ -105,11 +144,38 @@ class _ClientesPageState extends State<ClientesPage> {
                     final cliente = ClienteModel(
                       id: clienteIdEditando ?? '',
                       nome: nome,
-                      celular: celular,
+                      celular: celularParaBanco,
                       email: email,
                       salaoId: widget.salaoId,
                     );
+                    */
+                    final nome = nomeController.text.trim();
+                      
+                      // 1. Pegamos o que está no campo e removemos TUDO que não é número
+                      String celularLimpo = celularController.text.replaceAll(RegExp(r'\D'), '');
 
+                      // 2. Se o usuário digitou (71) 99966-4411, celularLimpo terá 11 dígitos.
+                      // Se por acaso ele já digitou o 55, celularLimpo terá 13.
+                      if (celularLimpo.length < 10) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Celular inválido. Informe DDD + número')),
+                        );
+                        return;
+                      }
+
+                      // 3. PADRONIZAÇÃO: Agora forçamos o 55 para o banco
+                      final celularParaBanco = celularLimpo.startsWith('55') 
+                          ? celularLimpo 
+                          : '55$celularLimpo';
+
+                      final cliente = ClienteModel(
+                        id: clienteIdEditando ?? '',
+                        nome: nome,
+                        celular: celularParaBanco, // Aqui vai o 5571999664411
+                        email: emailController.text.trim(),
+                        salaoId: widget.salaoId,
+                      );
+                                          
                     setState(() => _carregandoOperacao = true);
 
                     try {
@@ -249,7 +315,7 @@ class _ClientesPageState extends State<ClientesPage> {
                                                 fontWeight: FontWeight.bold),
                                       ),
                                       const SizedBox(height: 4),
-                                      Text(cliente.celular,
+                                      Text(cliente.celular.toTelefoneElegante(),
                                           style: Theme.of(context)
                                               .textTheme
                                               .bodyMedium),

@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:multi_select_flutter/multi_select_flutter.dart';
 import '../models/profissional_model.dart';
 import '../services/profissional_service.dart';
+import 'package:flutter_multi_formatter/flutter_multi_formatter.dart';
+import 'package:app_salao_pro/utils/string_extensions.dart';
 
 class ProfissionaisPage extends StatefulWidget {
   final String salaoId;
@@ -58,12 +60,24 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
 
   Future<void> mostrarFormulario({ProfissionalModel? profissional}) async {
     final nomeController = TextEditingController(text: profissional?.nome ?? '');
+    // Controller para o celular com o valor vindo do model se for edição
+    final celularController = TextEditingController(text: profissional?.celular ?? '');
+    
+    
     List<String> especialidadesSelecionadas = [];
     String modoAgendamentoSelecionado = profissional?.modoAgendamento ?? 'por_profissional';
 
     if (profissional != null) {
       final profCompleto = await service.buscarPorId(profissional.id);
       especialidadesSelecionadas = profCompleto.especialidadeIds;
+      // LIMPEZA: Remove o 55 para o controller receber apenas o DDD + Numero
+      String telbanco = profissional.celular.replaceAll(RegExp(r'\D'), '');
+      if (telbanco.startsWith('55') && telbanco.length > 11) {
+        celularController.text = telbanco.substring(2);
+      } else {
+        celularController.text = telbanco;
+      }      
+
     }
 
     await showDialog(
@@ -78,6 +92,14 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
               TextField(
                 controller: nomeController,
                 decoration: const InputDecoration(labelText: 'Nome'),
+              ),
+              const SizedBox(height: 12),
+              // NOVO: Campo de celular
+              TextField(
+                controller: celularController,
+                decoration: const InputDecoration(labelText: 'Celular *'),
+                keyboardType: TextInputType.phone,
+                inputFormatters: [MaskedInputFormatter('(00) 00000-0000')],
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -117,17 +139,42 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
           ElevatedButton(
             onPressed: () async {
               final nome = nomeController.text.trim();
-              if (nome.isEmpty || especialidadesSelecionadas.isEmpty) {
+              
+              // LIMPEZA: Remove tudo que não for número e garante o 55
+              //String celularLimpo = celularController.text.replaceAll(RegExp(r'[^0-9]'), '');
+              //if (celularLimpo.isNotEmpty && !celularLimpo.startsWith('55')) {
+              //  celularLimpo = '55$celularLimpo';
+              //}
+
+              // 1. Pegamos o que está no campo e removemos TUDO que não é número
+              String celularLimpo = celularController.text.replaceAll(RegExp(r'\D'), '');
+
+              // 2. Se o usuário digitou (71) 99966-4411, celularLimpo terá 11 dígitos.
+              // Se por acaso ele já digitou o 55, celularLimpo terá 13.
+              if (celularLimpo.length < 10) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Celular inválido. Informe DDD + número')),
+                    );
+                      return;
+              }
+
+              if (nome.isEmpty || especialidadesSelecionadas.isEmpty || celularLimpo.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Preencha todos os campos')),
+                  const SnackBar(content: Text('Preencha nome, especialidades e celular')),
                 );
                 return;
               }
+
+              // 3. PADRONIZAÇÃO: Agora forçamos o 55 para o banco
+              final celularParaBanco = celularLimpo.startsWith('55') 
+                  ? celularLimpo 
+                  : '55$celularLimpo';
 
               final model = ProfissionalModel(
                 id: profissional?.id ?? '',
                 nome: nome,
                 salaoId: widget.salaoId,
+                celular: celularParaBanco, // Enviando o número formatado para o banco
                 especialidadeIds: especialidadesSelecionadas,
                 modoAgendamento: modoAgendamentoSelecionado,
               );
@@ -138,13 +185,15 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
                 } else {
                   await service.atualizar(model);
                 }
-                Navigator.pop(context);
+                if (mounted) Navigator.pop(context);
                 await carregarDados();
               } catch (e) {
                 debugPrint('Erro ao salvar profissional: $e');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Erro ao salvar profissional')),
-                );
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Erro ao salvar profissional')),
+                  );
+                }
               }
             },
             child: const Text('Salvar'),
@@ -154,30 +203,6 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
     );
   }
 
-  /*
-  Future<void> excluirProfissional(String id) async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirmar exclusão'),
-        content: const Text('Deseja realmente excluir este profissional?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Excluir')),
-        ],
-      ),
-    );
-
-    if (confirmar == true) {
-      try {
-        await service.excluir(id);
-        await carregarDados();
-      } catch (e) {
-        debugPrint('Erro ao excluir profissional: $e');
-      }
-    }
-  }
-  */
   Future<void> excluirProfissional(String id) async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -198,25 +223,24 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
     );
 
     if (confirmar == true) {
-      // 🔹 Optimistic UI: remove da lista local imediatamente
       setState(() {
         profissionais.removeWhere((p) => p.id == id);
       });
 
       try {
         await service.excluir(id);
-
-        // Feedback visual de sucesso
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profissional excluído com sucesso!')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Profissional excluído com sucesso!')),
+          );
+        }
       } catch (e) {
-        // Em caso de erro, recarrega lista para manter consistência
         await carregarDados();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao excluir profissional: $e')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro ao excluir profissional: $e')),
+          );
+        }
       }
     }
   }
@@ -275,11 +299,18 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
                                         'Especialidades: ${profissional.nomesEspecialidades?.join(", ") ?? "Nenhuma"}',
                                         style: Theme.of(context).textTheme.bodyMedium,
                                       ),
-                                      const SizedBox(height: 6),
+                                      const SizedBox(height: 4),
                                       Text(
                                         'Agendamento: ${profissional.modoAgendamento == 'por_profissional' ? 'Por Profissional' : 'Por Serviço'}',
                                         style: Theme.of(context).textTheme.bodySmall,
                                       ),
+                                      const SizedBox(height: 4),
+                                      // EXIBIÇÃO: Mostra o Zap salvo
+                                      Text(
+                                        (profissional.celular == 'null' || profissional.celular.isEmpty) ? '' : profissional.celular.toTelefoneElegante(),
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodyMedium),
                                       const SizedBox(height: 8),
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.end,

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+//import 'package:flutter/services.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:typed_data';
+//import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_multi_formatter/flutter_multi_formatter.dart';
 
 class EditarSalaoPage extends StatefulWidget {
   final String salaoId;
@@ -62,8 +63,16 @@ class _EditarSalaoPageState extends State<EditarSalaoPage> {
         .single();
 
     setState(() {
+    
       nomeController.text = response['nome'] ?? '';
-      celularController.text = response['celular'] ?? '';
+      // LIMPEZA: Remove o 55 para o controller receber apenas o DDD + Numero
+      String telbanco = response['celular']!.replaceAll(RegExp(r'\D'), '');
+      if (telbanco.startsWith('55') && telbanco.length > 11) {
+        celularController.text = telbanco.substring(2);
+      } else {
+        celularController.text = telbanco;
+      }      
+      //celularController.text = response['celular'] ?? '';
       modoAgendamento = response['modo_agendamento'] ?? 'por_profissional';
       logoUrl = response['logo_url'];
     });
@@ -74,12 +83,19 @@ class _EditarSalaoPageState extends State<EditarSalaoPage> {
 
     setState(() => carregando = true);
 
+    String celularLimpo = celularController.text.replaceAll(RegExp(r'\D'), '');
+
+    // 3. PADRONIZAÇÃO: Agora forçamos o 55 para o banco
+    final celularParaBanco = celularLimpo.startsWith('55') 
+        ? celularLimpo 
+        : '55$celularLimpo';
+    
     try {
       await Supabase.instance.client
           .from('saloes')
           .update({
             'nome': nomeController.text.trim(),
-            'celular': celularController.text.trim(),
+            'celular': celularParaBanco, // Enviando o número formatado para o banco
             'modo_agendamento': modoAgendamento,
             'logo_url': logoUrl,
           })
@@ -110,7 +126,7 @@ class _EditarSalaoPageState extends State<EditarSalaoPage> {
         .from(bucket)
         .uploadBinary(fileName, bytes, fileOptions: FileOptions(upsert: true));
 
-    if (response != null && response is String) {
+    if (response.isEmpty) {
       setState(() {
         logoUrl = Supabase.instance.client.storage.from(bucket).getPublicUrl(fileName);
       });
@@ -165,6 +181,16 @@ class _EditarSalaoPageState extends State<EditarSalaoPage> {
     celularController.dispose();
     super.dispose();
   }
+
+  bool _celularValido(String celular) {
+    // Remove tudo que não é número
+    final numeros = celular.replaceAll(RegExp(r'\D'), '');
+    
+    // Agora aceitamos:
+    // 11 dígitos: Padrão nacional (ex: 71991147042)
+    // 13 dígitos: Padrão internacional (ex: 5571991147042)
+    return numeros.length == 11 || numeros.length == 13;
+  }  
 
   @override
   Widget build(BuildContext context) {
@@ -249,8 +275,12 @@ class _EditarSalaoPageState extends State<EditarSalaoPage> {
                         labelText: 'Celular',
                         prefixIcon: Icon(Icons.phone),
                       ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [celularMask],
+                      //keyboardType: TextInputType.number,
+                      keyboardType: TextInputType.phone,
+                      //inputFormatters: [celularMask],
+                      inputFormatters: [MaskedInputFormatter('(00) 00000-0000')],
+                      validator: (v) =>
+                          v == null || v.isEmpty || !_celularValido(v)? 'Informe um celular válido' : null,
                     ),
                     const SizedBox(height: 16),
 

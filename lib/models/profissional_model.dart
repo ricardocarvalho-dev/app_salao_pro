@@ -2,29 +2,26 @@ class ProfissionalModel {
   final String id;
   final String nome;
   final String salaoId;
-
-  /// Lista de IDs de especialidades vinculadas ao profissional
+  final String celular; // <-- NOVO CAMPO
   List<String> especialidadeIds;
-
-  /// Lista opcional com os nomes das especialidades (para exibição)
   List<String>? nomesEspecialidades;
-
-  /// Define se o agendamento é por profissional ou por serviço/especialidade
   String modoAgendamento;
 
   ProfissionalModel({
     required this.id,
     required this.nome,
     required this.salaoId,
+    required this.celular, // <-- ADICIONADO AQUI
     required this.especialidadeIds,
     this.nomesEspecialidades,
-    this.modoAgendamento = 'por_profissional', // valor padrão
+    this.modoAgendamento = 'por_profissional',
   });
 
   ProfissionalModel copyWith({
     String? id,
     String? nome,
     String? salaoId,
+    String? celular, // <-- ADICIONADO AQUI
     List<String>? especialidadeIds,
     List<String>? nomesEspecialidades,
     String? modoAgendamento,
@@ -33,6 +30,7 @@ class ProfissionalModel {
       id: id ?? this.id,
       nome: nome ?? this.nome,
       salaoId: salaoId ?? this.salaoId,
+      celular: celular ?? this.celular, // <-- ADICIONADO AQUI
       especialidadeIds: especialidadeIds ?? this.especialidadeIds,
       nomesEspecialidades: nomesEspecialidades ?? this.nomesEspecialidades,
       modoAgendamento: modoAgendamento ?? this.modoAgendamento,
@@ -44,6 +42,7 @@ class ProfissionalModel {
       id: map['id']?.toString() ?? '',
       nome: map['nome']?.toString() ?? '',
       salaoId: map['salao_id']?.toString() ?? '',
+      celular: map['celular']?.toString() ?? '', // <-- ADICIONADO AQUI
       especialidadeIds: (map['especialidade_ids'] as List<dynamic>? ?? [])
           .map((e) => e.toString())
           .toList(),
@@ -61,9 +60,7 @@ class ProfissionalModel {
       'id': id,
       'nome': nome,
       'salao_id': salaoId,
-      // ⚠️ Se já estiver usando a tabela de junção profissional_especialidades,
-      // esse campo pode ser ignorado na persistência e usado apenas internamente.
-      'especialidade_ids': especialidadeIds,
+      'celular': celular, // <-- ADICIONADO AQUI
       'modo_agendamento': modoAgendamento,
     };
   }

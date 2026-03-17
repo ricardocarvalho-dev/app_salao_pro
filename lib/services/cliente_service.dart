@@ -132,9 +132,21 @@ class ClienteService {
     }
   }
 
+  /*
   bool _celularValido(String celular) {
     final numeros = celular.replaceAll(RegExp(r'\D'), '');
     return numeros.length == 11;
   }
+  */
+
+  bool _celularValido(String celular) {
+    // Remove tudo que não é número
+    final numeros = celular.replaceAll(RegExp(r'\D'), '');
+    
+    // Agora aceitamos:
+    // 11 dígitos: Padrão nacional (ex: 71991147042)
+    // 13 dígitos: Padrão internacional (ex: 5571991147042)
+    return numeros.length == 11 || numeros.length == 13;
+  }  
 
 }

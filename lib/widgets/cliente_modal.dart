@@ -33,8 +33,15 @@ class _ClienteModalState extends State<ClienteModal> {
 
     if (widget.cliente != null) {
       nomeController.text = widget.cliente!.nome;
-      celularController.text = widget.cliente!.celular;
+      //celularController.text = widget.cliente!.celular;
       emailController.text = widget.cliente!.email;
+      // LIMPEZA: Remove o 55 para o controller receber apenas o DDD + Numero
+      String telBanco = widget.cliente!.celular.replaceAll(RegExp(r'\D'), '');
+      if (telBanco.startsWith('55') && telBanco.length > 11) {
+        celularController.text = telBanco.substring(2);
+      } else {
+        celularController.text = telBanco;
+      }      
     }
   }
 
@@ -101,15 +108,30 @@ class _ClienteModalState extends State<ClienteModal> {
 
   Future<void> _salvar() async {
     final nome = nomeController.text.trim();
-    final celular = celularController.text.trim();
+    //final celular = celularController.text.trim();
     final email = emailController.text.trim();
 
+    // 1. Limpa a máscara e espaços
+    String celularLimpo = celularController.text.replaceAll(RegExp(r'\D'), '');    
+    /*
     if (nome.isEmpty || celular.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Preencha os campos obrigatórios')),
       );
       return;
     }
+    */
+    if (nome.isEmpty || celularLimpo.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Preencha os campos obrigatórios')),
+      );
+      return;
+    }    
+
+    // 2. Garante o prefixo 55 antes de criar o modelo
+    final celularParaBanco = celularLimpo.startsWith('55') 
+        ? celularLimpo 
+        : '55$celularLimpo';
 
     setState(() => carregando = true);
 
@@ -117,7 +139,8 @@ class _ClienteModalState extends State<ClienteModal> {
       final cliente = ClienteModel(
         id: widget.cliente?.id ?? '',
         nome: nome,
-        celular: celular,
+        //celular: celular,
+        celular: celularParaBanco, // <--- Agora vai padronizado
         email: email,
         salaoId: widget.salaoId,
       );
