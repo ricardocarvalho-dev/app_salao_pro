@@ -95,66 +95,8 @@ class _MyAppState extends State<MyApp> {
     // 2. App em segundo plano
     FirebaseMessaging.onMessageOpenedApp.listen(_tratarNavegacaoNotificacao);
   }
-  /*
+
   void _tratarNavegacaoNotificacao(RemoteMessage message) {
-    debugPrint("🔔 Notificação recebida nos dados: ${message.data}");
-    final data = message.data;
-
-    if (data['tipo'] == 'novo_agendamento') {
-      try {
-        final String dataStr = data['dataAgendamento'];
-        DateTime dataAgendamento = DateTime.parse(dataStr);
-
-        // O microtask garante que a execução espere o próximo ciclo de renderização
-        Future.microtask(() {
-          if (navigatorKey.currentState != null) {
-            navigatorKey.currentState?.push(
-              MaterialPageRoute(
-                builder: (context) => AgendamentoMovelPage(
-                  salaoId: data['salaoId'],
-                  dataSelecionada: dataAgendamento,
-                  clienteId: data['clienteId'],
-                  profissionalId: (data['profissionalId'] == null || data['profissionalId'].toString().isEmpty) 
-                      ? null 
-                      : data['profissionalId'],
-                  servicoId: data['servicoId'],
-                  modoAgendamento: 'por_servico',
-                ),
-              ),
-            );
-          } else {
-            debugPrint("⚠️ Navigator ainda não está pronto. Tentando novamente em 1 segundo...");
-            Future.delayed(const Duration(seconds: 1), () => _tratarNavegacaoNotificacao(message));
-          }
-        });
-      } catch (e) {
-        debugPrint("❌ Erro ao processar navegação: $e");
-      }
-    }
-  }
-  */
-  /* 
-  void _tratarNavegacaoNotificacao(RemoteMessage message) {
-    debugPrint("🔔 Dados recebidos no clique: ${message.data}");
-    final data = message.data;
-
-    // 1. Verificamos se o tipo é o que esperamos
-    if (data['tipo'] == 'novo_agendamento') {
-      try {
-        final String? dataStr = data['dataAgendamento'];
-        if (dataStr == null) return;
-
-        DateTime dataAgendamento = DateTime.parse(dataStr);
-
-        // 2. Chamamos a função de segurança para navegar
-        _navegarComSeguranca(data, dataAgendamento);
-      } catch (e) {
-        debugPrint("❌ Erro ao converter data: $e");
-      }
-    }
-  }  
-  */
-void _tratarNavegacaoNotificacao(RemoteMessage message) {
     final data = message.data;
     if (data['tipo'] == 'novo_agendamento') {
       try {
