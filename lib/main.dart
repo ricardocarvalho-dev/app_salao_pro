@@ -23,21 +23,24 @@ RemoteMessage? notificacaoPendente;
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🔹 Inicialização do Firebase
-  try {
-    await Firebase.initializeApp();
-    debugPrint('🔥 Firebase inicializado com sucesso');
-  } catch (e) {
-    debugPrint('❌ Erro ao inicializar Firebase: $e');
-  }    
-
   // ✅ Carregamento do .env
   if (!kIsWeb) {
+    // 1. Carrega o .env
     try {
       await dotenv.load(fileName: 'assets/.env');
     } catch (e) {
       debugPrint('Erro ao carregar .env: $e');
     }
+
+    // 2. Inicializa o Firebase (Push Notifications)
+    try {
+      await Firebase.initializeApp();
+      debugPrint('🔥 Firebase inicializado com sucesso (Mobile)');
+    } catch (e) {
+      debugPrint('❌ Erro ao inicializar Firebase: $e');
+    }
+  } else {
+    debugPrint('🌐 Rodando no Chrome: Ignorando .env local e Firebase Push (usando chaves Web)');
   }
 
   // ✅ Busca das credenciais
@@ -81,9 +84,15 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    // 🔔 Configura o ouvinte de cliques em notificações
-    _setupNotificationListeners();
-  }
+
+    // 🔔 Só configura notificações se NÃO for Web (Chrome)
+    // Isso evita o erro de "FirebaseException" que você viu no log
+    if (!kIsWeb) {
+      _setupNotificationListeners();
+    } else {
+      debugPrint("🌐 Info: Ambiente Web detectado. Notificações Push ignoradas.");
+    }
+  }  
 
   Future<void> _setupNotificationListeners() async {
     // 1. App totalmente fechado
