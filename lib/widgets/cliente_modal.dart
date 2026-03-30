@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_multi_formatter/flutter_multi_formatter.dart';
-
 import '../models/cliente_model.dart';
 import '../services/cliente_service.dart';
 
@@ -33,9 +32,8 @@ class _ClienteModalState extends State<ClienteModal> {
 
     if (widget.cliente != null) {
       nomeController.text = widget.cliente!.nome;
-      //celularController.text = widget.cliente!.celular;
       emailController.text = widget.cliente!.email;
-      // LIMPEZA: Remove o 55 para o controller receber apenas o DDD + Numero
+      
       String telBanco = widget.cliente!.celular.replaceAll(RegExp(r'\D'), '');
       if (telBanco.startsWith('55') && telBanco.length > 11) {
         celularController.text = telBanco.substring(2);
@@ -59,7 +57,7 @@ class _ClienteModalState extends State<ClienteModal> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(
         widget.cliente == null ? 'Novo Cliente' : 'Editar Cliente',
-        style: Theme.of(context).textTheme.titleMedium,
+        // Removido o style antigo para seguir o padrão limpo
       ),
       content: SingleChildScrollView(
         child: Column(
@@ -92,13 +90,20 @@ class _ClienteModalState extends State<ClienteModal> {
           onPressed: carregando ? null : () => Navigator.pop(context),
           child: const Text('Cancelar'),
         ),
-        TextButton(
+        ElevatedButton( // Alterado para ElevatedButton para seguir o padrão
           onPressed: carregando ? null : _salvar,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFF97316), // Laranja padrão
+            foregroundColor: Colors.white,
+          ),
           child: carregando
               ? const SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2, 
+                    color: Colors.white
+                  ),
                 )
               : const Text('Salvar'),
         ),
@@ -108,27 +113,28 @@ class _ClienteModalState extends State<ClienteModal> {
 
   Future<void> _salvar() async {
     final nome = nomeController.text.trim();
-    //final celular = celularController.text.trim();
     final email = emailController.text.trim();
 
-    // 1. Limpa a máscara e espaços
-    String celularLimpo = celularController.text.replaceAll(RegExp(r'\D'), '');    
-    /*
-    if (nome.isEmpty || celular.isEmpty) {
+    // 1. Limpeza de celular (Igual ao ClientesPage)
+    String celularLimpo = celularController.text.replaceAll(RegExp(r'\D'), '');
+
+    // 2. Validação de tamanho (Igual ao ClientesPage)
+    if (celularLimpo.length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Preencha os campos obrigatórios')),
+        const SnackBar(content: Text('Celular inválido. Informe DDD + número')),
       );
       return;
     }
-    */
+
+    // 3. Validação de campos obrigatórios
     if (nome.isEmpty || celularLimpo.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Preencha os campos obrigatórios')),
+        const SnackBar(content: Text('Preencha nome e celular')),
       );
       return;
-    }    
+    }
 
-    // 2. Garante o prefixo 55 antes de criar o modelo
+    // 4. Padronização para o banco
     final celularParaBanco = celularLimpo.startsWith('55') 
         ? celularLimpo 
         : '55$celularLimpo';
@@ -136,11 +142,10 @@ class _ClienteModalState extends State<ClienteModal> {
     setState(() => carregando = true);
 
     try {
-      final cliente = ClienteModel(
+      final model = ClienteModel(
         id: widget.cliente?.id ?? '',
         nome: nome,
-        //celular: celular,
-        celular: celularParaBanco, // <--- Agora vai padronizado
+        celular: celularParaBanco,
         email: email,
         salaoId: widget.salaoId,
       );
@@ -148,24 +153,21 @@ class _ClienteModalState extends State<ClienteModal> {
       String clienteId;
 
       if (widget.cliente == null) {
-        // ✅ Novo cliente → retorna ID
-        clienteId =
-            await _clienteService.adicionarRetornandoId(cliente);
+        // Usa o método que retorna o ID (importante para o AgendamentoMovel)
+        clienteId = await _clienteService.adicionarRetornandoId(model);
       } else {
-        // ✅ Edição
-        await _clienteService.atualizar(cliente);
-        clienteId = cliente.id;
+        await _clienteService.atualizar(model);
+        clienteId = model.id;
       }
 
-      Navigator.pop(context, clienteId);
+      if (mounted) Navigator.pop(context, clienteId);
     } catch (e) {
-      final mensagem = e is Exception
-          ? e.toString().replaceAll('Exception: ', '')
-          : 'Erro ao salvar cliente';
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(mensagem)),
-      );
+      debugPrint('Erro ao salvar cliente: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erro ao salvar cliente')),
+        );
+      }
     } finally {
       if (mounted) setState(() => carregando = false);
     }

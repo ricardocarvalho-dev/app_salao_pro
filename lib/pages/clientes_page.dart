@@ -3,6 +3,8 @@ import 'package:flutter_multi_formatter/flutter_multi_formatter.dart';
 import '../models/cliente_model.dart';
 import '../services/cliente_service.dart';
 import 'package:app_salao_pro/utils/string_extensions.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter/services.dart'; // <--- ESSA LINHA AQUI
 
 class ClientesPage extends StatefulWidget {
   final String salaoId;
@@ -73,6 +75,7 @@ class _ClientesPageState extends State<ClientesPage> {
       emailController.clear();
     }
 
+    /*
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -214,8 +217,107 @@ class _ClientesPageState extends State<ClientesPage> {
         ],
       ),
     );
+    */
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(cliente == null ? 'Novo Cliente' : 'Editar Cliente'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nomeController,
+                decoration: const InputDecoration(labelText: 'Nome *'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: celularController,
+                decoration: const InputDecoration(labelText: 'Celular *'),
+                keyboardType: TextInputType.phone,
+                inputFormatters: [MaskedInputFormatter('(00) 00000-0000')],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailController,
+                decoration: const InputDecoration(labelText: 'E-mail'),
+                keyboardType: TextInputType.emailAddress,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final nome = nomeController.text.trim();
+              
+              // 1. Limpeza de celular (Igual ao Profissionais)
+              String celularLimpo = celularController.text.replaceAll(RegExp(r'\D'), '');
+
+              // 2. Validação de tamanho (Igual ao Profissionais)
+              if (celularLimpo.length < 10) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Celular inválido. Informe DDD + número')),
+                );
+                return;
+              }
+
+              // 3. Validação de campos obrigatórios (Adaptado para Clientes)
+              if (nome.isEmpty || celularLimpo.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Preencha nome e celular')),
+                );
+                return;
+              }
+
+              // 4. Padronização para o banco (Igual ao Profissionais)
+              final celularParaBanco = celularLimpo.startsWith('55') 
+                  ? celularLimpo 
+                  : '55$celularLimpo';
+
+              final model = ClienteModel(
+                id: cliente?.id ?? '',
+                nome: nome,
+                celular: celularParaBanco,
+                email: emailController.text.trim(),
+                salaoId: widget.salaoId,
+              );
+
+              try {
+                // Usando a lógica de salvar do Profissionais
+                if (cliente == null) {
+                  await _clienteService.adicionar(model);
+                } else {
+                  await _clienteService.atualizar(model);
+                }
+                
+                if (mounted) Navigator.pop(context);
+                await _carregarClientes(); // Supondo que sua função de atualizar lista seja esta
+                
+              } catch (e) {
+                debugPrint('Erro ao salvar cliente: $e');
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Erro ao salvar cliente')),
+                  );
+                }
+              }
+            },
+            child: const Text('Salvar'),
+          ),
+        ],
+      ),
+    );
+
   }
 
+  /*
   Future<void> _excluirCliente(String id) async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -249,6 +351,55 @@ class _ClientesPageState extends State<ClientesPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Erro ao excluir cliente: $e')),
         );
+      }
+    }
+  }
+  */
+
+  Future<void> _excluirCliente(String id) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Confirmar exclusão'),
+        content: const Text('Deseja realmente excluir este cliente?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      // UI REATIVA: Remove da lista privada _clientes imediatamente
+      setState(() {
+        //_clientes.removeWhere((c) => c['id'] == id);
+        _clientes.removeWhere((c) => c.id == id); 
+      });
+
+      try {
+        await _clienteService.excluir(id);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Cliente excluído com sucesso!')),
+          );
+        }
+      } catch (e) {
+        // Se falhar, recarrega do banco para restaurar o item na tela
+        await _carregarClientes();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro ao excluir cliente: $e')),
+          );
+        }
       }
     }
   }
@@ -364,4 +515,30 @@ class _ClientesPageState extends State<ClientesPage> {
       ),
     );
   }
+
+  Widget _buildTextField(TextEditingController controller, String label, 
+      {bool isPhone = false, bool isEmail = false, List<TextInputFormatter>? formatters}) {
+    return TextField(
+      controller: controller,
+      inputFormatters: formatters,
+      keyboardType: isPhone ? TextInputType.phone : (isEmail ? TextInputType.emailAddress : TextInputType.text),
+      decoration: InputDecoration(
+        hintText: label,
+        hintStyle: GoogleFonts.poppins(color: const Color(0xFF6B7280), fontSize: 14),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        // MOLDURA (Border)
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(15),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }    
+
 }
