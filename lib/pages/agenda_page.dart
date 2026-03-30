@@ -195,7 +195,9 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
           },
         ),
         const SizedBox(height: 16),
-        ElevatedButton.icon(
+        SizedBox(
+          width: double.infinity, // <--- Isso resolve o tamanho
+          child: ElevatedButton.icon(
           icon: const Icon(Icons.add),
           label: const Text('Novo Agendamento'),
           onPressed: () async {
@@ -227,6 +229,7 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
               await carregarAgendamentos();
             }
           },
+          ),
         ),
       ],
     );
