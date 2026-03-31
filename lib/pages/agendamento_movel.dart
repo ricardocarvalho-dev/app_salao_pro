@@ -84,7 +84,7 @@ class _AgendamentoMovelPageState extends ConsumerState<AgendamentoMovelPage> {
     final supabase = Supabase.instance.client;
     try {
       final c = await supabase.from('clientes').select().eq('salao_id', widget.salaoId).order('nome', ascending: true);
-      final p = await supabase.from('profissionais').select().eq('salao_id', widget.salaoId).order('nome', ascending: true);
+      final p = await supabase.from('profissionais').select().eq('salao_id', widget.salaoId).eq('modo_agendamento', 'por_profissional').order('nome', ascending: true);
       final s = await supabase.from('servicos').select().eq('salao_id', widget.salaoId).order('nome', ascending: true);
       final pe = await supabase.from('profissional_especialidades').select();
       
