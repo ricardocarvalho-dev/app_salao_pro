@@ -77,36 +77,7 @@ class _LoginPageState extends State<LoginPage> {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(mensagem)));
   }
-  /*
-  Future<void> enviarEmailRedefinicaoSenha() async {
-    FocusScope.of(context).unfocus();
-    final email = emailController.text.trim();
 
-    if (email.isEmpty) {
-      mostrarErro('Informe o e-mail para redefinir a senha.');
-      return;
-    }
-
-    const String deepLink = 'salaopro://redefinir-senha';
-
-    try {
-      await Supabase.instance.client.auth.resetPasswordForEmail(
-        email,
-        redirectTo: deepLink,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text(
-                '📧 E-mail de redefinição enviado. Verifique sua caixa de entrada.')),
-      );
-    } on AuthException catch (e) {
-      mostrarErro(_traduzErro(e.message));
-    } catch (e) {
-      mostrarErro('Erro ao enviar e-mail: ${e.toString()}');
-    }
-  }
-  */
   Future<void> enviarEmailRedefinicaoSenha() async {
     FocusScope.of(context).unfocus();
     final email = emailController.text.trim();
@@ -141,7 +112,6 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-
   String _traduzErro(String erroOriginal) {
     final erro = erroOriginal.toLowerCase();
     if (erro.contains('invalid login credentials')) return 'E-mail ou senha incorretos.';
@@ -156,6 +126,10 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final estiloTexto = GoogleFonts.poppins(fontSize: 16);
+    
+    // ✅ Detecta se o sistema está em Modo Escuro
+    final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Entrar')),
       body: SafeArea(
@@ -165,8 +139,11 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // ✅ Logo dinâmica conforme o tema
                 Image.asset(
-                  'assets/logo_salao_pro.png',
+                  isDarkMode 
+                    ? 'assets/salao-pro-logo-negativa.png' 
+                    : 'assets/salao-pro-logo-positiva.png',
                   height: 120,
                 ),
                 const SizedBox(height: 24),

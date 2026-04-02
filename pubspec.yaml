@@ -71,10 +71,11 @@ flutter:
   uses-material-design: true
   assets:
     - assets/.env
-    - assets/logo_salao_pro.png
     - assets/logo_salao_pro_horiz.png
     - assets/logo_salao_pro_horiz_trans.png
     - assets/icon.png
+    - assets/salao-pro-logo-positiva.png
+    - assets/salao-pro-logo-negativa.png
   
 fonts:
   - family: Roboto
