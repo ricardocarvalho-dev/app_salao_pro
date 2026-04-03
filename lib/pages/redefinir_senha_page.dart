@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class RedefinirSenhaPage extends StatefulWidget {
   const RedefinirSenhaPage({super.key});
@@ -14,54 +15,8 @@ class _RedefinirSenhaPageState extends State<RedefinirSenhaPage> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   String? _errorMessage;
+  final _storage = const FlutterSecureStorage();
 
-  /*
-  Future<void> _updatePassword() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    try {
-      final newPassword = _senhaController.text.trim();
-
-      // Atualiza a senha do usuário logado (via deep link recovery)
-      final response = await Supabase.instance.client.auth.updateUser(
-        UserAttributes(password: newPassword),
-      );
-
-      if (response.user != null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Senha redefinida com sucesso!')),
-        );
-        // Redireciona para Login
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-      } else {
-        if (!mounted) return;
-        setState(() {
-          _errorMessage = 'Não foi possível redefinir a senha. Tente novamente.';
-        });
-      }
-    } on AuthException catch (e) {
-      setState(() {
-        _errorMessage = 'Erro de autenticação: ${e.message}';
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Erro inesperado: $e';
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
-  */
   Future<void> _updatePassword() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -92,6 +47,21 @@ class _RedefinirSenhaPageState extends State<RedefinirSenhaPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Senha redefinida com sucesso!')),
         );
+
+        // 🔥 SINCRONIZAÇÃO TOTAL: 
+        // Salvamos a nova senha E garantimos que o e-mail do usuário também esteja no cofre.
+        final userEmail = response.user!.email;
+        if (userEmail != null) {
+          await _storage.write(key: 'user_email', value: userEmail);
+        }
+
+        // 🔥 SINCRONIZAÇÃO: Como ele redefiniu a senha, precisamos atualizar o cofre
+        // para que o próximo login via bio não use a senha esquecida/antiga.
+        await _storage.write(key: 'user_password', value: newPassword);
+
+        // Opcional: Garante que a bio fique ativa se ele acabou de resetar a senha
+        await _storage.write(key: 'use_bio', value: 'true');
+
         Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
       } else {
         if (!mounted) return;

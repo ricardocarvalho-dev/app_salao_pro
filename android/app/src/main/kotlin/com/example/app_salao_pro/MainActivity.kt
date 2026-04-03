@@ -1,5 +1,7 @@
 package com.example.app_salao_pro
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+class MainActivity: FlutterFragmentActivity() {
+    // Corpo vazio, mas com as chaves
+}

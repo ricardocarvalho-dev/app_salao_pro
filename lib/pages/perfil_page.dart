@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class PerfilPage extends StatefulWidget {
   const PerfilPage({super.key});
@@ -12,6 +13,7 @@ class _PerfilPageState extends State<PerfilPage> {
   final emailController = TextEditingController();
   final senhaController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _storage = const FlutterSecureStorage();
 
   bool carregando = false;
 
@@ -35,12 +37,26 @@ class _PerfilPageState extends State<PerfilPage> {
 
     setState(() => carregando = true);
 
+    // Lê uma única vez se o usuário usa bio
+    final useBio = await _storage.read(key: 'use_bio') == 'true';
+
     try {
       final auth = Supabase.instance.client.auth;
 
       // Atualizar e-mail
       if (novoEmail.isNotEmpty) {
-        await auth.updateUser(UserAttributes(email: novoEmail));
+        // Chama a função SQL que criamos acima
+        await Supabase.instance.client.rpc(
+          'atualizar_email_sem_confirmacao', 
+          params: {'novo_email': novoEmail}
+        );
+
+        //await auth.updateUser(UserAttributes(email: novoEmail));
+        
+        // Como não há confirmação por e-mail, o banco já mudou.
+        // Atualizamos o cofre IMEDIATAMENTE para a Bio não quebrar
+        // 🔥 SINCRONIZAÇÃO SEGURA: Só grava se a bio estiver ativa
+        if (useBio) await _storage.write(key: 'user_email', value: novoEmail);
       }
 
       // Atualizar senha
@@ -51,6 +67,8 @@ class _PerfilPageState extends State<PerfilPage> {
           return;
         }
         await auth.updateUser(UserAttributes(password: novaSenha));
+        // 🔥 SINCRONIZAÇÃO: Atualiza o cofre com a nova senha
+        if (useBio) await _storage.write(key: 'user_password', value: novaSenha);
       }
 
       mostrarMensagem('Dados atualizados com sucesso!');
@@ -96,7 +114,12 @@ class _PerfilPageState extends State<PerfilPage> {
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) {
                   if (v == null || v.isEmpty) return null; // email opcional
-                  if (!v.contains('@')) return 'E-mail inválido';
+                  // Expressão Regular para validar formato de e-mail
+                  final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                  
+                  if (!emailRegex.hasMatch(v)) {
+                    return 'Digite um e-mail válido (ex: nome@email.com)';
+                  }
                   return null;
                 },
               ),

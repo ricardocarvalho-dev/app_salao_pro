@@ -162,6 +162,12 @@ class _CadastroPageState extends State<CadastroPage> {
       final user = authResponse.user;
       if (user == null) {
         throw Exception('Erro ao criar conta. Tente novamente mais tarde.');
+      } else {
+        // Salva no cofre para que, se ele deslogar, a bio já funcione de cara
+        await storage.write(key: 'user_email', value: email);
+        await storage.write(key: 'user_password', value: senha);
+        // Opcional: já marcar como true se você quiser que a bio seja sugerida
+        // ou apenas deixar para a LoginPage perguntar no primeiro retorno.
       }
 
       // Salvar token para login automático

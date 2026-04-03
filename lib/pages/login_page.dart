@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'home_page.dart';
 import 'cadastro_page.dart';
+import 'package:app_salao_pro/services/biometria_service.dart'; // ✅ Certifique-se que o caminho está correto
+import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // adicione o import e a instância do storage
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -16,12 +18,75 @@ class _LoginPageState extends State<LoginPage> {
   final senhaController = TextEditingController();
   bool carregando = false;
   bool _senhaVisivel = false;
+  final _storage = const FlutterSecureStorage(); // No início da classe _LoginPageState
+
+  @override
+  void initState() {
+    super.initState();
+    // ✅ Dispara a tentativa de biometria assim que a tela abre
+    _tentarBiometriaAutomatica();
+  }
 
   @override
   void dispose() {
     emailController.dispose();
     senhaController.dispose();
     super.dispose();
+  }
+
+  // ✅ Método para Bio estilo "App de Banco"
+  Future<void> _tentarBiometriaAutomatica() async {
+    // --- ADICIONE ESTA LINHA AQUI ---
+    final useBio = await _storage.read(key: 'use_bio');
+    if (useBio != 'true') return; // Se o usuário não ativou explicitamente, para aqui.
+    
+    // 1. Tenta ler o que está no cofre
+    final emailSalvo = await _storage.read(key: 'user_email');
+    final senhaSalva = await _storage.read(key: 'user_password');
+
+    // Só prossegue se tiver algo guardado
+    if (emailSalvo != null && senhaSalva != null) {
+      // Pequeno delay para a UI respirar
+      await Future.delayed(const Duration(milliseconds: 600));
+
+      // 2. Pede o desbloqueio do celular (Digital/PIN/Face)
+      bool sucessoBio = await BiometriaService.autenticar();
+
+      if (sucessoBio && mounted) {
+        setState(() => carregando = true);
+        try {
+          // 3. Tenta o login silencioso no Supabase
+          final response = await Supabase.instance.client.auth.signInWithPassword(
+            email: emailSalvo,
+            password: senhaSalva,
+          );
+
+          if (response.user != null && mounted) {
+            // Busca o perfil (reaproveite sua lógica existente aqui)
+            final perfil = await Supabase.instance.client
+                .from('profiles')
+                .select('salao_id')
+                .eq('id', response.user!.id)
+                .maybeSingle();
+
+            if (perfil != null && perfil['salao_id'] != null) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => HomePage(salaoId: perfil['salao_id'].toString())),
+              );
+            }
+          }
+        } on AuthException catch (e) {
+          // Se a senha mudou e o cofre está velho, limpa para não dar erro na próxima
+          if (e.message.contains('Invalid login credentials')) {
+            await _storage.delete(key: 'user_password');
+          }
+          debugPrint('Erro no login auto: ${e.message}');
+        } finally {
+          if (mounted) setState(() => carregando = false);
+        }
+      }
+    }
   }
 
   Future<void> logarUsuario() async {
@@ -46,7 +111,47 @@ class _LoginPageState extends State<LoginPage> {
         mostrarErro('Usuário não encontrado.');
         return;
       }
+      else {
+        // 1. Verifica se já perguntamos sobre a biometria antes
+        String? jaPerguntou = await _storage.read(key: 'perguntou_bio');
+        String? useBio = await _storage.read(key: 'use_bio');
 
+        if (jaPerguntou == null && mounted) {
+          // 2. PRIMEIRA VEZ: Abre o diálogo perguntando
+          bool desejaBio = await showDialog(
+            context: context,
+            barrierDismissible: false, // Obriga a escolher sim ou não
+            builder: (context) => AlertDialog(
+              title: const Text('Acesso Rápido'),
+              content: const Text('Deseja usar a biometria ou senha do celular para entrar nas próximas vezes?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false), 
+                  child: const Text('Agora não'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true), 
+                  child: const Text('Sim, ativar'),
+                ),
+              ],
+            ),
+          ) ?? false;
+
+          if (desejaBio) {
+            await _storage.write(key: 'use_bio', value: 'true');
+            await _storage.write(key: 'user_email', value: email);
+            await _storage.write(key: 'user_password', value: senha);
+          }
+          // Marca que já fizemos a pergunta uma vez na vida
+          await _storage.write(key: 'perguntou_bio', value: 'true');
+          
+        } else if (useBio == 'true') {
+          // 3. JÁ ATIVOU NO PASSADO: Apenas atualiza as credenciais (caso tenham mudado)
+          await _storage.write(key: 'user_email', value: email);
+          await _storage.write(key: 'user_password', value: senha);
+        }
+      }
+      
       final perfil = await Supabase.instance.client
           .from('profiles')
           .select('salao_id')
@@ -68,7 +173,7 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       mostrarErro('Erro inesperado: ${e.toString()}');
     } finally {
-      setState(() => carregando = false);
+      if (mounted) setState(() => carregando = false);
     }
   }
 
@@ -126,8 +231,6 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final estiloTexto = GoogleFonts.poppins(fontSize: 16);
-    
-    // ✅ Detecta se o sistema está em Modo Escuro
     final bool isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -139,7 +242,6 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // ✅ Logo dinâmica conforme o tema
                 Image.asset(
                   isDarkMode 
                     ? 'assets/salao-pro-logo-negativa.png' 

@@ -53,6 +53,11 @@ dependencies:
   permission_handler: ^11.3.1 # Para pedir permissão de ler contatos
   firebase_messaging: ^16.1.2
   firebase_core: ^4.5.0
+
+  # Autenticação Biométrica
+  local_auth: ^2.3.0
+  local_auth_android: ^1.0.39
+  local_auth_darwin: ^1.1.1
   
 dev_dependencies:
   flutter_test:
