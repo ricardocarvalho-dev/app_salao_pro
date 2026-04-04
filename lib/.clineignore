@@ -1,0 +1,24 @@
+# Pastas do Sistema e IDE (Economia de tokens)
+.dart_tool/
+.fvm/
+.idea/
+.vscode/
+node_modules/
+
+# Plataformas Nativas (Já prontas)
+android/
+ios/
+linux/
+macos/
+windows/
+web/
+
+# Assets, Documentação e Build
+assets/
+docs/
+build/
+
+# Ignorar UI e Design dentro da LIB (Onde está o seu Front-end pronto)
+lib/pages/
+lib/theme/
+lib/widgets/
