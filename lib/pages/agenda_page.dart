@@ -90,6 +90,7 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
     }
   }
 
+  /*
   Future<void> excluirAgendamento(String id) async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -114,7 +115,33 @@ class _AgendaPageState extends ConsumerState<AgendaPage> {
       await carregarAgendamentos();
     }
   }
+  */
+  Future<void> excluirAgendamento(String id) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Confirmar Exclusão'),
+        content: const Text('Deseja realmente excluir este agendamento?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          // Alterado para ElevatedButton para seguir o padrão de Especialidades
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
 
+    if (confirmar == true) {
+      await service.excluir(id, ref);
+      await carregarAgendamentos();
+    }
+  }
+  
   Widget _buildFiltrosCalendario() {
     final dados = ref.watch(agendamentoProvider);
     final filtros = ref.watch(agendaFiltroProvider);

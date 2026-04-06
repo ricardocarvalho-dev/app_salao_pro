@@ -346,6 +346,7 @@ class _ServicosPageState extends State<ServicosPage> {
     }
   }
   */
+  /*
   Future<void> excluirServico(String id) async {
     final confirmar = await showDialog<bool>(
       context: context,
@@ -391,7 +392,47 @@ class _ServicosPageState extends State<ServicosPage> {
       }
     }
   }
+  */
+  Future<void> excluirServico(String id) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar exclusão'),
+        content: const Text('Deseja realmente excluir este serviço?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          // Alterado para ElevatedButton para seguir o padrão de Especialidades
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
 
+    if (confirmar == true) {
+      setState(() {
+        servicos.removeWhere((s) => s.id == id);
+      });
+
+      try {
+        await service.excluir(id);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Serviço excluído com sucesso!')),
+        );
+      } catch (e) {
+        await carregarServicos();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao excluir serviço: $e')),
+        );
+      }
+    }
+  }  
 
   // ======================
   // BUILD

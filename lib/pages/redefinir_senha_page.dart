@@ -13,7 +13,12 @@ class _RedefinirSenhaPageState extends State<RedefinirSenhaPage> {
   final _senhaController = TextEditingController();
   final _confirmacaoController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  
   bool _isLoading = false;
+  // 👁️ As duas variáveis de controle de visibilidade
+  bool _obscurePassword = true; 
+  bool _obscureConfirmPassword = true; 
+  
   String? _errorMessage;
   final _storage = const FlutterSecureStorage();
 
@@ -27,17 +32,13 @@ class _RedefinirSenhaPageState extends State<RedefinirSenhaPage> {
 
     try {
       final newPassword = _senhaController.text.trim();
-
-      // 🔑 Verifica se há sessão ativa
       final session = Supabase.instance.client.auth.currentSession;
+      
       if (session == null) {
-        setState(() {
-          _errorMessage = 'Nenhuma sessão ativa. O link pode ter expirado.';
-        });
+        setState(() => _errorMessage = 'Sessão expirada. Solicite um novo link.');
         return;
       }
 
-      // Atualiza a senha do usuário logado (via deep link recovery)
       final response = await Supabase.instance.client.auth.updateUser(
         UserAttributes(password: newPassword),
       );
@@ -48,41 +49,21 @@ class _RedefinirSenhaPageState extends State<RedefinirSenhaPage> {
           const SnackBar(content: Text('Senha redefinida com sucesso!')),
         );
 
-        // 🔥 SINCRONIZAÇÃO TOTAL: 
-        // Salvamos a nova senha E garantimos que o e-mail do usuário também esteja no cofre.
         final userEmail = response.user!.email;
         if (userEmail != null) {
           await _storage.write(key: 'user_email', value: userEmail);
         }
-
-        // 🔥 SINCRONIZAÇÃO: Como ele redefiniu a senha, precisamos atualizar o cofre
-        // para que o próximo login via bio não use a senha esquecida/antiga.
         await _storage.write(key: 'user_password', value: newPassword);
-
-        // Opcional: Garante que a bio fique ativa se ele acabou de resetar a senha
         await _storage.write(key: 'use_bio', value: 'true');
 
         Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-      } else {
-        if (!mounted) return;
-        setState(() {
-          _errorMessage = 'Não foi possível redefinir a senha. Tente novamente.';
-        });
       }
     } on AuthException catch (e) {
-      setState(() {
-        _errorMessage = 'Erro de autenticação: ${e.message}';
-      });
+      setState(() => _errorMessage = e.message);
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Erro inesperado: $e';
-      });
+      setState(() => _errorMessage = 'Erro inesperado: $e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -97,95 +78,72 @@ class _RedefinirSenhaPageState extends State<RedefinirSenhaPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Redefinir Senha')),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(32.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  'Digite sua nova senha',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 24),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(32.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
+              const Text(
+                'Digite sua nova senha',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
 
-                TextFormField(
-                  controller: _senhaController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Nova Senha',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(12)),
-                    ),
-                    prefixIcon: Icon(Icons.lock),
+              // Campo 1: Nova Senha
+              TextFormField(
+                controller: _senhaController,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  labelText: 'Nova Senha',
+                  border: const OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Informe uma senha';
-                    }
-                    if (value.length < 6) {
-                      return 'A senha deve ter pelo menos 6 caracteres';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                TextFormField(
-                  controller: _confirmacaoController,
-                  obscureText: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Confirmar Senha',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.all(Radius.circular(12)),
-                    ),
-                    prefixIcon: Icon(Icons.check),
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                   ),
-                  validator: (value) {
-                    if (value != _senhaController.text) {
-                      return 'As senhas não coincidem';
-                    }
-                    return null;
-                  },
                 ),
-                const SizedBox(height: 24),
+                validator: (value) => (value == null || value.length < 6) ? 'Mínimo 6 caracteres' : null,
+              ),
+              const SizedBox(height: 20),
 
-                if (_errorMessage != null)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: Text(
-                      _errorMessage!,
-                      style: const TextStyle(color: Colors.red),
-                      textAlign: TextAlign.center,
-                    ),
+              // Campo 2: Confirmar Senha (AGORA COM OLHINHO TAMBÉM)
+              TextFormField(
+                controller: _confirmacaoController,
+                obscureText: _obscureConfirmPassword,
+                decoration: InputDecoration(
+                  labelText: 'Confirmar Senha',
+                  border: const OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(12)),
                   ),
+                  prefixIcon: const Icon(Icons.check_circle_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureConfirmPassword ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                  ),
+                ),
+                validator: (value) => (value != _senhaController.text) ? 'As senhas não coincidem' : null,
+              ),
+              const SizedBox(height: 32),
 
-                ElevatedButton(
+              if (_errorMessage != null)
+                Text(_errorMessage!, style: const TextStyle(color: Colors.red), textAlign: TextAlign.center),
+
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
                   onPressed: _isLoading ? null : _updatePassword,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 3,
-                          ),
-                        )
-                      : const Text(
-                          'Redefinir Senha',
-                          style: TextStyle(fontSize: 18),
-                        ),
+                  child: _isLoading 
+                    ? const CircularProgressIndicator(color: Colors.white) 
+                    : const Text('Salvar Nova Senha', style: TextStyle(fontSize: 18)),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
