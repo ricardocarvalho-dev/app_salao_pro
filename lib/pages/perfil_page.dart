@@ -16,6 +16,8 @@ class _PerfilPageState extends State<PerfilPage> {
   final _storage = const FlutterSecureStorage();
 
   bool carregando = false;
+  // 1. Variável para controlar a visibilidade (igual à LoginPage)
+  bool _senhaVisivel = false; 
 
   @override
   void initState() {
@@ -37,29 +39,19 @@ class _PerfilPageState extends State<PerfilPage> {
 
     setState(() => carregando = true);
 
-    // Lê uma única vez se o usuário usa bio
     final useBio = await _storage.read(key: 'use_bio') == 'true';
 
     try {
       final auth = Supabase.instance.client.auth;
 
-      // Atualizar e-mail
       if (novoEmail.isNotEmpty) {
-        // Chama a função SQL que criamos acima
         await Supabase.instance.client.rpc(
           'atualizar_email_sem_confirmacao', 
           params: {'novo_email': novoEmail}
         );
-
-        //await auth.updateUser(UserAttributes(email: novoEmail));
-        
-        // Como não há confirmação por e-mail, o banco já mudou.
-        // Atualizamos o cofre IMEDIATAMENTE para a Bio não quebrar
-        // 🔥 SINCRONIZAÇÃO SEGURA: Só grava se a bio estiver ativa
         if (useBio) await _storage.write(key: 'user_email', value: novoEmail);
       }
 
-      // Atualizar senha
       if (novaSenha.isNotEmpty) {
         if (novaSenha.length < 6) {
           mostrarMensagem('A senha deve ter pelo menos 6 caracteres.');
@@ -67,11 +59,12 @@ class _PerfilPageState extends State<PerfilPage> {
           return;
         }
         await auth.updateUser(UserAttributes(password: novaSenha));
-        // 🔥 SINCRONIZAÇÃO: Atualiza o cofre com a nova senha
         if (useBio) await _storage.write(key: 'user_password', value: novaSenha);
       }
 
       mostrarMensagem('Dados atualizados com sucesso!');
+      // Limpa o campo de senha após atualizar para segurança
+      senhaController.clear();
     } catch (e) {
       mostrarMensagem('Erro: $e');
     } finally {
@@ -109,16 +102,14 @@ class _PerfilPageState extends State<PerfilPage> {
                 controller: emailController,
                 decoration: const InputDecoration(
                   labelText: 'Novo e-mail',
-                  prefixIcon: Icon(Icons.email),
+                  prefixIcon: Icon(Icons.email_outlined), // Ajustado para Outline igual à Login
                 ),
                 keyboardType: TextInputType.emailAddress,
                 validator: (v) {
-                  if (v == null || v.isEmpty) return null; // email opcional
-                  // Expressão Regular para validar formato de e-mail
+                  if (v == null || v.isEmpty) return null;
                   final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-                  
                   if (!emailRegex.hasMatch(v)) {
-                    return 'Digite um e-mail válido (ex: nome@email.com)';
+                    return 'Digite um e-mail válido';
                   }
                   return null;
                 },
@@ -126,16 +117,28 @@ class _PerfilPageState extends State<PerfilPage> {
 
               const SizedBox(height: 16),
 
-              /// NOVA SENHA
+              /// NOVA SENHA (COM VISUALIZADOR)
               TextFormField(
                 controller: senhaController,
-                decoration: const InputDecoration(
+                // 2. Controla se o texto fica escondido ou não
+                obscureText: !_senhaVisivel, 
+                decoration: InputDecoration(
                   labelText: 'Nova senha',
-                  prefixIcon: Icon(Icons.lock),
+                  prefixIcon: const Icon(Icons.lock_outline), // Ajustado para Outline
+                  // 3. Adiciona o ícone do "olhinho"
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _senhaVisivel ? Icons.visibility_off : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _senhaVisivel = !_senhaVisivel;
+                      });
+                    },
+                  ),
                 ),
-                obscureText: true,
                 validator: (v) {
-                  if (v == null || v.isEmpty) return null; // senha opcional
+                  if (v == null || v.isEmpty) return null;
                   if (v.length < 6) return 'Mínimo 6 caracteres';
                   return null;
                 },
