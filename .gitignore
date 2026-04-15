@@ -59,6 +59,7 @@ package-lock.json
 package.json
 tsconfig.json
 server.ts
-supabase/
+supabase/.env
+supabase/functions/*/node_modules/
 .env
 lib/.env
