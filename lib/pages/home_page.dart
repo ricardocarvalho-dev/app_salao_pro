@@ -11,13 +11,12 @@ import 'editar_salao_page.dart';
 import 'perfil_page.dart';
 import 'package:app_salao_pro/widgets/theme_selector.dart';
 import 'dart:async';
-import 'package:app_salao_pro/pages/central_mensagens_page.dart';
-import 'package:app_salao_pro/services/contato_service.dart';
 // 🔹 ADICIONADO:
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:app_salao_pro/main.dart';
 import 'package:app_salao_pro/pages/agendamento_movel.dart';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class HomePage extends StatefulWidget {
   final String? salaoId;
@@ -34,6 +33,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String? emailDono;
   String? logoUrl;
   bool chatbotAtivo = false; // 🔹 ADICIONADO
+  String statusConexao = 'checking'; // 'checking', 'connected', 'disconnected'
+  String? instanciaWhatsapp; // 🔹 ADICIONE ESTA LINHA
 
   bool carregando = true;
   bool erro = false;
@@ -82,7 +83,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     _load();
 
     // 2. 🔹 NOVO: Configura o recebimento de notificações para este celular
-    _configurarPushNotifications();
+    //_configurarPushNotifications();
+    if (!kIsWeb) {
+      _configurarPushNotifications();
+    }
 
     // 3. 🔹 Refresh AGRESSIVO (Mude de 30 para 2 ou 3 segundos)
     // Isso garante que assim que o banco terminar, o app perceba rápido.
@@ -218,7 +222,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       });
       // ADICIONE ESTA LINHA:
       _refreshTimer?.cancel(); 
-      debugPrint('✅ Sucesso: Salão pronto e Timer encerrado.');      
+      debugPrint('✅ Sucesso: Salão pronto e Timer encerrado.');   
+      // 🔹 ADICIONE ISSO AQUI PARA O STATUS APARECER ASSIM QUE ENTRAR NA HOME
+      if (chatbotAtivo && instanciaWhatsapp != null) {
+        _verificarStatusWhatsApp(instanciaWhatsapp!);
+      }   
     }
 
   }
@@ -263,7 +271,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> carregarDadosSalaoComId(String id) async {
     final response = await Supabase.instance.client
         .from('saloes')
-        .select('nome, email, logo_url, chatbot_ativo')
+        .select('nome, email, logo_url, chatbot_ativo, instancia_whatsapp')
         .eq('id', id) // 👈 Usa o ID que passamos por parâmetro
         .maybeSingle();
 
@@ -278,7 +286,13 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       emailDono = response['email'];
       logoUrl = response['logo_url'];
       chatbotAtivo = response['chatbot_ativo'] ?? false; // 👈 Inicializa a variável
+      instanciaWhatsapp = response['instancia_whatsapp']; // Certifique-se de ter essa variável
     });
+
+    // 🔹 ADICIONE ISSO AQUI:
+    if (chatbotAtivo && instanciaWhatsapp != null) {
+      _verificarStatusWhatsApp(instanciaWhatsapp!);
+    }
   }
 
   Future<void> logout(BuildContext context) async {
@@ -303,6 +317,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
   // 🔹 NOVO MÉTODO ADICIONADO:
   Future<void> _configurarPushNotifications() async {
+    // 🔹 REGRA DE OURO: Não roda push notifications se estiver no navegador
+    if (kIsWeb) return;
+
     try {
       final fcm = FirebaseMessaging.instance;
       final supabase = Supabase.instance.client;
@@ -333,35 +350,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
-  /*
-  Future<void> _toggleChatbot(bool status, String salaoId) async {
-    try {
-      await Supabase.instance.client
-          .from('saloes')
-          .update({'chatbot_ativo': status})
-          .eq('id', salaoId);
-
-      setState(() {
-        chatbotAtivo = status;
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(status ? "Chatbot ativado com sucesso!" : "Chatbot desativado."),
-          backgroundColor: status ? Colors.green : Colors.orange,
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
-      debugPrint('Erro ao atualizar chatbot: $e');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Erro ao atualizar status do chatbot.")),
-      );
-    }
-  }  
-  */
   Future<void> _toggleChatbot(bool status, String salaoId) async {
     try {
       // 1. Atualiza o banco de dados primeiro
@@ -372,11 +360,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       setState(() {
         chatbotAtivo = status;
+        if (status) statusConexao = 'checking'; // Reseta o visual para carregar o QR Code se for ativado
       });
 
       // 2. Se o status for ATIVO (true), chama a Edge Function
+      /*
       if (status) {
         _chamarSetupEdgeFunction(salaoId);
+      }
+      */
+      if (status) {
+        // 1. Faz o setup (que abre o QR Code se necessário)
+        await _chamarSetupEdgeFunction(salaoId);
+        
+        // 2. 🔹 ADICIONE ISSO: Força uma checagem de status logo após
+        if (instanciaWhatsapp != null) {
+          _verificarStatusWhatsApp(instanciaWhatsapp!);
+        }
       }
 
       if (!mounted) return;
@@ -426,6 +426,47 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('❌ Erro ao chamar Edge Function: $e');
       // Opcional: Avisar o usuário que o setup falhou
+    }
+  }  
+
+  // 4. Função para verificar o status da conexão do WhatsApp (pode ser chamada em um timer ou após a função de setup)
+  Future<void> _verificarStatusWhatsApp(String instancia) async {
+    if (!mounted) return;
+
+    try {
+      // Vamos chamar a Evolution para ver o estado da conexão
+      // Dica: Você pode criar uma Edge Function simplificada só para o check 
+      // ou usar o invoke para uma que retorne o connectionState.
+      final response = await Supabase.instance.client.functions.invoke(
+        'setup_salao_premium', // Ela já tem o check de existência que retorna se está pronto
+        body: { "instancia": instancia, 
+                "celular": "CHECK", // Valor fictício só para passar na validação
+                "salaoNome": nomeSalao
+              },
+      );
+
+      if (!mounted) return;
+
+      /*
+      if (response.data['success'] == true) {
+        setState(() {
+          statusConexao = 'connected';
+        });
+      } else {
+        setState(() {
+          statusConexao = 'disconnected';
+        });
+      }
+      */
+
+      // A lógica aqui depende do que sua Edge Function retorna no "Check de existência"
+      // Se resCheck.ok retornar success: true, consideramos conectado.
+      setState(() {
+        statusConexao = response.data['success'] == true ? 'connected' : 'disconnected';
+      });
+      
+    } catch (e) {
+      if (mounted) setState(() => statusConexao = 'disconnected');
     }
   }  
 
@@ -671,6 +712,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
         padding: const EdgeInsets.all(20),
         children: [
           // 🤖 CARD DO CHATBOT (ADICIONADO)
+          /*
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -692,6 +734,91 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                 color: chatbotAtivo ? Colors.green : Colors.grey,
               ),
               onChanged: (bool value) => _toggleChatbot(value, idSeguro),
+            ),
+          ),
+          */
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: t.colorScheme.outlineVariant),
+            ),
+            child: Column(
+              children: [
+                SwitchListTile(
+                  title: const Text('Status do Chatbot', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Row(
+                    children: [
+                      if (statusConexao == 'checking' && chatbotAtivo)
+                          const SizedBox(
+                            width: 10,
+                            height: 10,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                      else
+                      // Bolinha de status
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: !chatbotAtivo 
+                              ? Colors.grey 
+                              : (statusConexao == 'connected' ? Colors.green : Colors.red),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        !chatbotAtivo ? "Desativado" : (statusConexao == 'connected' ? "Conectado" : "Aguardando Aparelho"),
+                        style: TextStyle(color: chatbotAtivo && statusConexao == 'connected' ? Colors.green : Colors.grey),
+                      ),
+                    ],
+                  ),
+                  value: chatbotAtivo,
+                  secondary: Icon(Icons.smart_toy_rounded, color: chatbotAtivo ? Colors.green : Colors.grey),
+                  onChanged: (bool value) => _toggleChatbot(value, idSeguro),
+                ),
+                
+                /*
+                // 🔹 ITEM 2: BOTÃO VISUALIZAR QR CODE (Só aparece se o bot estiver ativo mas não conectado)
+                if (chatbotAtivo && statusConexao != 'connected')
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
+                    child: ElevatedButton.icon(
+                      onPressed: () => _chamarSetupEdgeFunction(idSeguro),
+                      icon: const Icon(Icons.qr_code_scanner),
+                      label: const Text("Visualizar QR Code"),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: t.colorScheme.primaryContainer,
+                        minimumSize: const Size(double.infinity, 40),
+                      ),
+                    ),
+                  ),
+                */
+                // 🔹 ITEM 2: BOTÃO QR CODE (Sempre visível se o bot estiver ativo)
+                if (chatbotAtivo)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
+                    child: ElevatedButton.icon(
+                      onPressed: () => _chamarSetupEdgeFunction(idSeguro),
+                      icon: const Icon(Icons.qr_code_scanner),
+                      // Texto muda conforme o status para dar feedback ao usuário
+                      label: Text(statusConexao == 'connected' 
+                        ? "Reconectar / Ver QR Code" 
+                        : "Visualizar QR Code"),
+                      style: ElevatedButton.styleFrom(
+                        // Cor muda para um tom mais neutro se já estiver conectado
+                        backgroundColor: statusConexao == 'connected'
+                            ? t.colorScheme.surfaceVariant
+                            : t.colorScheme.primaryContainer,
+                        foregroundColor: statusConexao == 'connected'
+                            ? t.colorScheme.onSurfaceVariant
+                            : t.colorScheme.onPrimaryContainer,
+                        minimumSize: const Size(double.infinity, 40),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           
