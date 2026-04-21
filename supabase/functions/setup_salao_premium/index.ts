@@ -4,9 +4,25 @@ const EVOLUTION_URL = Deno.env.get("EVOLUTION_URL");
 const EVOLUTION_API_KEY = Deno.env.get("EVOLUTION_API_KEY");
 const MAESTRO_URL = "https://xwbabsvbcwlqfgcnmxtj.supabase.co/functions/v1/webhook_maestro";
 
+// 🔹 1. Definição dos Headers de CORS
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 serve(async (req) => {
+  // 🔹 2. Resposta para a requisição de "preflight" (o navegador testa antes de enviar o POST)
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  // 🔹 3. Bloqueia outros métodos que não sejam POST
   if (req.method !== "POST") {
-    return new Response("Método não permitido", { status: 405 });
+    return new Response("Método não permitido", { 
+      status: 405, 
+      headers: corsHeaders 
+    });
   }
 
   try {
@@ -15,13 +31,42 @@ serve(async (req) => {
     if (!instancia || !celular || !salaoNome) {
       return new Response(
         JSON.stringify({ error: "Instância, Celular e Nome do Salão são obrigatórios" }),
-        { status: 400 }
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, "Content-Type": "application/json" } 
+        }
       );
     }
 
+    console.log(`🔍 Verificando se a instância ${instancia} já existe...`);
+
+    // --- CHECK DE EXISTÊNCIA ---
+    const resCheck = await fetch(`${EVOLUTION_URL}/instance/connectionState/${instancia}`, {
+      method: "GET",
+      headers: { apikey: EVOLUTION_API_KEY! }
+    });    
+    
+    if (resCheck.ok) {
+      console.log(`✅ Instância ${instancia} já existe. Recuperando QR Code...`);
+      const resConnect = await fetch(`${EVOLUTION_URL}/instance/connect/${instancia}`, {
+        method: "GET",
+        headers: { apikey: EVOLUTION_API_KEY! }
+      });
+      const dataConnect = await resConnect.json();
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: "Instância já existente e pronta.",
+        qrcode: dataConnect.base64 || null
+      }), { 
+        status: 200, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      });
+    }
+    
     console.log(`🚀 Iniciando setup para: ${instancia} (${salaoNome})`);
 
-    // PASSO 1: Criar instância com nome do salão e celular
+    // PASSO 1: Criar instância
     const resCreate = await fetch(`${EVOLUTION_URL}/instance/create`, {
       method: "POST",
       headers: {
@@ -33,8 +78,8 @@ serve(async (req) => {
         token: "",
         qrcode: true,
         integration: "WHATSAPP-BAILEYS",
-        name: salaoNome,       // nome amigável do salão cliente
-        phoneNumber: celular   // número de celular vinculado
+        name: salaoNome,
+        phoneNumber: celular
       }),
     });
 
@@ -66,13 +111,7 @@ serve(async (req) => {
     });
 
     const dataWebhook = await resWebhook.json();
-    console.log("Webhook response:", dataWebhook);
-
-    if (!resWebhook.ok) {
-      throw new Error(
-        `Erro ao configurar webhook: ${JSON.stringify(dataWebhook)}`
-      );
-    }
+    if (!resWebhook.ok) throw new Error(`Erro no webhook: ${JSON.stringify(dataWebhook)}`);
 
     // PASSO 3: Configurações de Conforto
     const resSettings = await fetch(`${EVOLUTION_URL}/settings/set/${instancia}`, {
@@ -93,24 +132,29 @@ serve(async (req) => {
     });
 
     const dataSettings = await resSettings.json();
-    console.log("Settings response:", dataSettings);
+    if (!resSettings.ok) throw new Error(`Erro nas settings: ${JSON.stringify(dataSettings)}`);
 
-    if (!resSettings.ok) {
-      throw new Error(
-        `Erro ao configurar settings: ${JSON.stringify(dataSettings)}`
-      );
-    }
-
+    // 🔹 4. Resposta Final com Sucesso
     return new Response(
       JSON.stringify({
         success: true,
         message: "Setup concluído!",
         qrcode: dataCreate.qrcode?.base64,
       }),
-      { status: 200 }
+      { 
+        status: 200, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      }
     );
+
   } catch (err) {
     console.error(`❌ Erro no Setup: ${err.message}`);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return new Response(
+      JSON.stringify({ error: err.message }), 
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, "Content-Type": "application/json" } 
+      }
+    );
   }
 });
