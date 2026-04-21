@@ -17,7 +17,7 @@ import 'package:app_salao_pro/services/contato_service.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:app_salao_pro/main.dart';
 import 'package:app_salao_pro/pages/agendamento_movel.dart';
-
+import 'dart:convert';
 
 class HomePage extends StatefulWidget {
   final String? salaoId;
@@ -33,6 +33,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   String nomeSalao = '';
   String? emailDono;
   String? logoUrl;
+  bool chatbotAtivo = false; // 🔹 ADICIONADO
 
   bool carregando = true;
   bool erro = false;
@@ -262,7 +263,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
   Future<void> carregarDadosSalaoComId(String id) async {
     final response = await Supabase.instance.client
         .from('saloes')
-        .select('nome, email, logo_url')
+        .select('nome, email, logo_url, chatbot_ativo')
         .eq('id', id) // 👈 Usa o ID que passamos por parâmetro
         .maybeSingle();
 
@@ -276,6 +277,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       nomeSalao = response['nome'] ?? 'Salão';
       emailDono = response['email'];
       logoUrl = response['logo_url'];
+      chatbotAtivo = response['chatbot_ativo'] ?? false; // 👈 Inicializa a variável
     });
   }
 
@@ -331,6 +333,102 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     }
   }
 
+  /*
+  Future<void> _toggleChatbot(bool status, String salaoId) async {
+    try {
+      await Supabase.instance.client
+          .from('saloes')
+          .update({'chatbot_ativo': status})
+          .eq('id', salaoId);
+
+      setState(() {
+        chatbotAtivo = status;
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(status ? "Chatbot ativado com sucesso!" : "Chatbot desativado."),
+          backgroundColor: status ? Colors.green : Colors.orange,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Erro ao atualizar chatbot: $e');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Erro ao atualizar status do chatbot.")),
+      );
+    }
+  }  
+  */
+  Future<void> _toggleChatbot(bool status, String salaoId) async {
+    try {
+      // 1. Atualiza o banco de dados primeiro
+      await Supabase.instance.client
+          .from('saloes')
+          .update({'chatbot_ativo': status})
+          .eq('id', salaoId);
+
+      setState(() {
+        chatbotAtivo = status;
+      });
+
+      // 2. Se o status for ATIVO (true), chama a Edge Function
+      if (status) {
+        _chamarSetupEdgeFunction(salaoId);
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(status ? "Chatbot ativado e configurando..." : "Chatbot desativado."),
+          backgroundColor: status ? Colors.green : Colors.orange,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Erro ao atualizar chatbot: $e');
+    }
+  }
+
+  // 3. Nova função para chamar a Edge Function
+  Future<void> _chamarSetupEdgeFunction(String salaoId) async {
+    try {
+      // Primeiro buscamos os dados atuais do salão para montar o body
+      final res = await Supabase.instance.client
+          .from('saloes')
+          .select('instancia_whatsapp, celular, nome')
+          .eq('id', salaoId)
+          .single();
+
+      // Chama a Edge Function via cliente do Supabase
+      // O nome 'setup_salao_premium' deve ser o mesmo que está no seu console do Supabase
+      final response =await Supabase.instance.client.functions.invoke(
+        'setup_salao_premium',
+        body: {
+          "instancia": res['instancia_whatsapp'],
+          "celular": res['celular'],
+          "salaoNome": res['nome']
+        },
+      );
+
+      debugPrint('✅ Edge Function chamada com sucesso!');
+
+      // O retorno da function está em response.data
+      final data = response.data;
+
+      if (data != null && data['qrcode'] != null) {
+        _exibirModalQRCode(data['qrcode']);
+      } else {
+        debugPrint('Instância já conectada ou QR Code não gerado.');
+      }
+      
+    } catch (e) {
+      debugPrint('❌ Erro ao chamar Edge Function: $e');
+      // Opcional: Avisar o usuário que o setup falhou
+    }
+  }  
+
   void _voltarParaLogin() {
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -346,6 +444,52 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     final partes = nome.trim().split(' ');
     if (partes.length == 1) return partes.first[0].toUpperCase();
     return (partes[0][0] + partes[1][0]).toUpperCase();
+  }
+
+  void _exibirModalQRCode(String base64Image) {
+    // Remove prefixos comuns se a API enviar (ex: data:image/png;base64,)
+    final String cleanBase64 = base64Image.replaceFirst(RegExp(r'data:image\/[a-zA-Z]+;base64,'), '');
+
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Obriga o usuário a fechar no botão
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("Escaneie o QR Code", textAlign: TextAlign.center),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Abra o WhatsApp > Aparelhos Conectados > Conectar um aparelho.",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Image.memory(
+                  base64Decode(cleanBase64),
+                  width: 250,
+                  height: 250,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Fechar"),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -526,32 +670,32 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-        // 🚀 NOVO: Botão de Chatbot (Funcionalidade Premium)
-          /*
-          _botaoNavegacao('💬 Central do Chatbot', () async {
-            // 1. Solicita a permissão (operação assíncrona)
-            bool permissaoOk = await ContatoService.pedirPermissao();
-
-            // 2. O SEGREDO: Verifica se o 'context' ainda é válido após o 'await'
-            if (!context.mounted) return; 
-
-            if (!permissaoOk) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Sem permissão, nomes não serão exibidos.')),
-              );
-            }
-            
-            // 3. Navega com segurança
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CentralMensagensPage(salaoId: idSeguro),
+          // 🤖 CARD DO CHATBOT (ADICIONADO)
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: t.colorScheme.outlineVariant),
+            ),
+            child: SwitchListTile(
+              title: const Text(
+                'Status do Chatbot',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-            );
-          }, isPremium: true),
-
-          const Divider(height: 32),          
-          */
+              subtitle: Text(
+                chatbotAtivo ? "Ativo e respondendo" : "Inativo / Pausado",
+                style: TextStyle(color: chatbotAtivo ? Colors.green : Colors.grey),
+              ),
+              value: chatbotAtivo,
+              secondary: Icon(
+                Icons.smart_toy_rounded,
+                color: chatbotAtivo ? Colors.green : Colors.grey,
+              ),
+              onChanged: (bool value) => _toggleChatbot(value, idSeguro),
+            ),
+          ),
+          
+          const SizedBox(height: 20), // Espaço entre o card e os botões
           
           _botaoNavegacao('Dashboard', () {
             Navigator.push(
@@ -609,53 +753,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     );
   }
 
-  /*
-  Widget _botaoNavegacao(String texto, VoidCallback onPressed) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: onPressed,
-          child: Text(texto),
-        ),
-      ),
-    );
-  }
-  */
-  /*
-  Widget _botaoNavegacao(String texto, VoidCallback onPressed, {bool isPremium = false}) {
-      final t = Theme.of(context); // Agora vamos usar o 't'
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: SizedBox(
-          width: double.infinity,
-          height: 55,
-          child: ElevatedButton(
-            onPressed: onPressed,
-            style: isPremium 
-              ? ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green.shade600,
-                  foregroundColor: Colors.white,
-                  elevation: 4,
-                ) 
-              : ElevatedButton.styleFrom(
-                  // Aqui usamos o 't' para manter o padrão do seu tema nos botões normais
-                  backgroundColor: t.colorScheme.primaryContainer, 
-                  foregroundColor: t.colorScheme.onPrimaryContainer,
-                ),
-            child: Text(
-              texto,
-              style: TextStyle(
-                fontWeight: isPremium ? FontWeight.bold : FontWeight.normal,
-                fontSize: 16,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-    */
+
     Widget _botaoNavegacao(String texto, VoidCallback onPressed, {bool isPremium = false}) {
       final t = Theme.of(context);
       return Padding(
