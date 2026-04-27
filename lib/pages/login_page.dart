@@ -5,6 +5,7 @@ import 'home_page.dart';
 import 'cadastro_page.dart';
 import 'package:app_salao_pro/services/biometria_service.dart'; // ✅ Certifique-se que o caminho está correto
 import 'package:flutter_secure_storage/flutter_secure_storage.dart'; // adicione o import e a instância do storage
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -23,8 +24,13 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void initState() {
     super.initState();
+
     // ✅ Dispara a tentativa de biometria assim que a tela abre
-    _tentarBiometriaAutomatica();
+    if (!kIsWeb) {
+      // Aqui vai o seu código de Acesso Rápido/Biometria
+      _tentarBiometriaAutomatica();
+    }
+
   }
 
   @override

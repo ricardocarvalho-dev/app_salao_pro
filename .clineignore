@@ -18,7 +18,10 @@ assets/
 docs/
 build/
 
-# Ignorar UI e Design dentro da LIB (Onde está o seu Front-end pronto)
-lib/pages/
-lib/theme/
-lib/widgets/
+# Remova a barra final da pasta para permitir que as exceções funcionem
+#lib/pages
+lib/theme
+lib/widgets
+
+# Force a liberação do arquivo específico
+!lib/pages/configuracao_agenda_page.dart

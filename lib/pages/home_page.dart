@@ -17,6 +17,7 @@ import 'package:app_salao_pro/main.dart';
 import 'package:app_salao_pro/pages/agendamento_movel.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:app_salao_pro/pages/configuracao_agenda_page.dart';
 
 class HomePage extends StatefulWidget {
   final String? salaoId;
@@ -426,7 +427,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('❌ Erro ao chamar Edge Function: $e');
       // Opcional: Avisar o usuário que o setup falhou
-    }
+     }
   }  
 
   // 4. Função para verificar o status da conexão do WhatsApp (pode ser chamada em um timer ou após a função de setup)
@@ -447,20 +448,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
 
       if (!mounted) return;
 
-      /*
-      if (response.data['success'] == true) {
-        setState(() {
-          statusConexao = 'connected';
-        });
-      } else {
-        setState(() {
-          statusConexao = 'disconnected';
-        });
-      }
-      */
-
-      // A lógica aqui depende do que sua Edge Function retorna no "Check de existência"
-      // Se resCheck.ok retornar success: true, consideramos conectado.
       setState(() {
         statusConexao = response.data['success'] == true ? 'connected' : 'disconnected';
       });
@@ -701,6 +688,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
               },
             ),
             ListTile(
+              leading: Icon(Icons.calendar_month),
+              title: Text("Gerenciar Datas e Folgas"),
+              subtitle: Text("Bloqueie datas específicas ou feriados"),
+              trailing: Icon(Icons.chevron_right),
+              onTap: () {
+                // Navega para a nova tela de gerenciamento de datas
+                Navigator.push(context, MaterialPageRoute(builder: (context) => ConfiguracaoAgendaPage()));
+              },
+            ),
+            ListTile(
               leading: const Icon(Icons.logout),
               title: const Text('Sair'),
               onTap: () => logout(context),
@@ -711,32 +708,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // 🤖 CARD DO CHATBOT (ADICIONADO)
-          /*
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: t.colorScheme.outlineVariant),
-            ),
-            child: SwitchListTile(
-              title: const Text(
-                'Status do Chatbot',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                chatbotAtivo ? "Ativo e respondendo" : "Inativo / Pausado",
-                style: TextStyle(color: chatbotAtivo ? Colors.green : Colors.grey),
-              ),
-              value: chatbotAtivo,
-              secondary: Icon(
-                Icons.smart_toy_rounded,
-                color: chatbotAtivo ? Colors.green : Colors.grey,
-              ),
-              onChanged: (bool value) => _toggleChatbot(value, idSeguro),
-            ),
-          ),
-          */
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -779,22 +750,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver {
                   onChanged: (bool value) => _toggleChatbot(value, idSeguro),
                 ),
                 
-                /*
-                // 🔹 ITEM 2: BOTÃO VISUALIZAR QR CODE (Só aparece se o bot estiver ativo mas não conectado)
-                if (chatbotAtivo && statusConexao != 'connected')
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12, left: 16, right: 16),
-                    child: ElevatedButton.icon(
-                      onPressed: () => _chamarSetupEdgeFunction(idSeguro),
-                      icon: const Icon(Icons.qr_code_scanner),
-                      label: const Text("Visualizar QR Code"),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: t.colorScheme.primaryContainer,
-                        minimumSize: const Size(double.infinity, 40),
-                      ),
-                    ),
-                  ),
-                */
                 // 🔹 ITEM 2: BOTÃO QR CODE (Sempre visível se o bot estiver ativo)
                 if (chatbotAtivo)
                   Padding(
