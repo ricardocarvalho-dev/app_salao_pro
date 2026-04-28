@@ -4,36 +4,61 @@ import { create } from "https://deno.land/x/djwt@v2.8/mod.ts"
 
 serve(async (req) => {
   try {
-    const { record } = await req.json()
+    const { record, old_record, type } = await req.json()
     
+    // 🛑 SEGURANÇA: Se não for INSERT ou DELETE, ignoramos para evitar duplicidade
+    if (type !== 'INSERT' && type !== 'DELETE') {
+      return new Response(JSON.stringify({ message: "Tipo de evento ignorado" }), { status: 200 })
+    }
+    
+    // Se for DELETE, usamos o 'old_record', se for INSERT usamos o 'record'
+    const dadosAgendamento = type === 'DELETE' ? old_record : record
+
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
+    // 1. Buscar detalhes (Nome do Cliente, Serviço, Profissional e Salão)
     const [clienteRes, servicoRes, profissionalRes, salaoRes] = await Promise.all([
-      supabaseAdmin.from('clientes').select('nome, celular').eq('id', record.cliente_id).single(),
-      supabaseAdmin.from('servicos').select('nome').eq('id', record.servico_id).single(),
-      record.profissional_id 
-        ? supabaseAdmin.from('profissionais').select('nome').eq('id', record.profissional_id).single()
+      supabaseAdmin.from('clientes').select('nome, celular').eq('id', dadosAgendamento.cliente_id).single(),
+      supabaseAdmin.from('servicos').select('nome').eq('id', dadosAgendamento.servico_id).single(),
+      dadosAgendamento.profissional_id 
+        ? supabaseAdmin.from('profissionais').select('nome').eq('id', dadosAgendamento.profissional_id).single()
         : { data: { nome: 'Qualquer disponível' }, error: null },
-      supabaseAdmin.from('saloes').select('dono_id, instancia_whatsapp').eq('id', record.salao_id).single()
+      supabaseAdmin.from('saloes').select('nome, dono_id, instancia_whatsapp').eq('id', dadosAgendamento.salao_id).single()
     ])
 
-    const nomeCliente = clienteRes.data?.nome ?? 'Cliente não identificado'
-    const nomeServico = servicoRes.data?.nome ?? 'Serviço não identificado'
+    const nomeCliente = clienteRes.data?.nome ?? 'Cliente'
+    const nomeServico = servicoRes.data?.nome ?? 'Serviço'
     const nomeProfissional = profissionalRes.data?.nome ?? 'Qualquer disponível'
+    const nomeSalao = salaoRes.data?.nome ?? 'nosso salão'
     const donoId = salaoRes.data?.dono_id
 
-    // 2. Buscar os tokens FCM do dono
+    // 2. Definir Textos baseados no Tipo de Operação
+    const isCancelamento = type === 'DELETE'
+    const tituloNotificacao = isCancelamento ? "❌ AGENDAMENTO CANCELADO" : "📝 NOVO AGENDAMENTO RECEBIDO"
+    const rodapeWhatsApp = isCancelamento ? "Agendamento cancelado! Obrigado!" : `Tudo certo! Te esperamos no ${nomeSalao}. 😊`
+
+    const dataFormatada = dadosAgendamento.data.split('-').reverse().join('/')
+    const horaFormatada = dadosAgendamento.hora.substring(0, 5)
+
+    const corpoBase = 
+`👤 Cliente: ${nomeCliente}
+✂️ Serviço: ${nomeServico}
+🧔 Profissional: ${nomeProfissional}
+📅 Data: ${dataFormatada}
+⏰ Hora: ${horaFormatada}`
+
+    const mensagemWhatsApp = `${corpoBase}\n\n${rodapeWhatsApp}`
+
+    // 3. Buscar os tokens FCM do dono para notificação Push
     const { data: tokens } = await supabaseAdmin
       .from('fcm_tokens')
       .select('token')
       .eq('usuario_id', donoId)
 
-    if (!tokens || tokens.length === 0) return new Response("Sem tokens", { status: 200 })
-
-    // 3. Autenticação Google Firebase (OAuth2)
+    // 4. Autenticação Firebase (JWT)
     const client_email = Deno.env.get('FIREBASE_CLIENT_EMAIL')
     const private_key = Deno.env.get('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n')
     const project_id = Deno.env.get('FIREBASE_PROJECT_ID')
@@ -65,102 +90,51 @@ serve(async (req) => {
     })
     const { access_token } = await tokenRes.json()
 
-    // 4. Montar o Corpo Estilizado (Incluindo o Cliente)
-    const dataFormatada = record.data.split('-').reverse().join('/')
-    const horaFormatada = record.hora.substring(0, 5)
-
-    const corpoNotificacao = 
-`👤 Cliente: ${nomeCliente}
-✂️ Serviço: ${nomeServico}
-🧔 Profissional: ${nomeProfissional}
-📅 Data: ${dataFormatada}
-⏰ Hora: ${horaFormatada}`
-
-    // 5. Enviar para os dispositivos
-    for (const item of tokens) {
-      await fetch(`https://fcm.googleapis.com/v1/projects/${project_id}/messages:send`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${access_token}`,
-        },
-        body: JSON.stringify({
-          message: {
-            token: item.token,
-            notification: {
-              title: "📝 NOVO AGENDAMENTO RECEBIDO",
-              body: corpoNotificacao
-            },
-            // 🚀 O SEGREDO ESTÁ AQUI:
-            data: {
-              tipo: "novo_agendamento",
-              salaoId: record.salao_id.toString(),
-              dataAgendamento: record.data, // Garante que envie "2026-03-19"
-              clienteId: record.cliente_id.toString(),
-              profissionalId: (record.profissional_id ?? "").toString(),
-              servicoId: record.servico_id.toString(),
-            },
-            // 📱 CONFIGURAÇÕES PARA GARANTIR QUE A NOTIFICAÇÃO CHEGUE COM SOM E SEJA ABERTA AO TOCAR
-            android: { 
-              priority: "high",
+    // 5. Enviar Notificação Push para o Dono
+    if (tokens && tokens.length > 0) {
+      for (const item of tokens) {
+        await fetch(`https://fcm.googleapis.com/v1/projects/${project_id}/messages:send`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${access_token}`,
+          },
+          body: JSON.stringify({
+            message: {
+              token: item.token,
               notification: {
-                sound: "default",
-                click_action: "FLUTTER_NOTIFICATION_CLICK"
+                title: tituloNotificacao,
+                body: isCancelamento ? `O agendamento de ${nomeCliente} foi cancelado.` : corpoBase
+              },
+              android: { 
+                priority: "high",
+                notification: { sound: "default", click_action: "FLUTTER_NOTIFICATION_CLICK" }
               }
             }
-          }
+          })
         })
-      })
+      }
     }
 
-    // 6. Envio do WhatsApp (Evolution API)
+    // 6. Envio do WhatsApp para o Cliente (Evolution API)
     if (clienteRes.data?.celular) {
-      const evolutionUrl = Deno.env.get('EVOLUTION_URL');
+      const evolutionUrl = Deno.env.get('EVOLUTION_URL')?.replace(/\/$/, '');
       const evolutionApiKey = Deno.env.get('EVOLUTION_API_KEY');
-       const instanciaWhatsapp = salaoRes.data?.instancia_whatsapp;
-       const telefoneCliente = clienteRes.data?.celular;
+      const instanciaWhatsapp = salaoRes.data?.instancia_whatsapp;
 
       if (evolutionUrl && evolutionApiKey && instanciaWhatsapp) {
-        try {
-          const urlLimpa = evolutionUrl.replace(/\/$/, '');
-          const urlFinal = `${urlLimpa}/message/sendText/${instanciaWhatsapp}`;
-
-          const celular = clienteRes.data?.celular;
-          const payload = {
-            "number": celular,
-            "text": corpoNotificacao,
-            "options": {
-              "delay": 1200,
-              "presence": "composing",
-              "linkPreview": false
-            }
-          };
-
-          const response = await fetch(urlFinal, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'apikey': evolutionApiKey
-            },
-            body: JSON.stringify(payload),
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('Resposta da Evolution:', errorText);
-            console.error('Erro ao enviar mensagem via Evolution API:', response.status, response.statusText);
-          } else {
-            console.log('Notificação enviada com sucesso para o ID:', record.id);
-          }
-        } catch (error) {
-          console.error('Erro ao enviar mensagem via Evolution API:', error.message);
-        }
-      } else {
-        console.warn('Variáveis de ambiente EVOLUTION_URL, EVOLUTION_API_KEY ou instancia_whatsapp não configuradas.');
+        const urlFinal = `${evolutionUrl}/message/sendText/${instanciaWhatsapp}`;
+        await fetch(urlFinal, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': evolutionApiKey },
+          body: JSON.stringify({
+            "number": clienteRes.data.celular,
+            "text": mensagemWhatsApp,
+            "options": { "delay": 1200, "presence": "composing" }
+          }),
+        });
       }
-     } else {
-       console.warn('Celular do cliente não encontrado. Mensagem não enviada.');
-     }
+    }
 
     return new Response(JSON.stringify({ success: true }), { status: 200 })
 

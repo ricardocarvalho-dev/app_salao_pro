@@ -5,6 +5,7 @@ import '../models/profissional_model.dart';
 import '../services/profissional_service.dart';
 import 'package:flutter_multi_formatter/flutter_multi_formatter.dart';
 import 'package:app_salao_pro/utils/string_extensions.dart';
+import 'configuracao_agenda_profissional_page.dart';
 
 class ProfissionaisPage extends StatefulWidget {
   final String salaoId;
@@ -315,6 +316,20 @@ class _ProfissionaisPageState extends State<ProfissionaisPage> {
                                       Row(
                                         mainAxisAlignment: MainAxisAlignment.end,
                                         children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.calendar_month, color: Colors.blueGrey),
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => ConfiguracaoAgendaProfissionalPage(
+                                                    profissionalId: profissional.id.toString(), // ID que vem do banco
+                                                    nomeProfissional: profissional.nome, // Nome que vem do banco
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
                                           IconButton(
                                             icon: const Icon(Icons.edit),
                                             tooltip: 'Editar',
