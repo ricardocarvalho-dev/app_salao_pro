@@ -176,7 +176,7 @@ serve(async (req) => {
             await supabase.from("atendimento_contexto").insert(inserts);
             resposta = lista + "\n" + nEmoji(0) + " - Voltar ↩️";
             novoStatus = 'aguardando_horario';
-          } else { resposta = "Não há horários livres para esta data. 😕 Tente outra!"; }
+          } else { resposta = "Não há horários livres para esta data. 😕 Tente outra ou digite 0 para voltar pro menu principal!"; }
         } else { resposta = "⚠️ Data inválida. Digite Ex: 15/03 ou 'Amanhã'."; }
 
       } else if (novoStatus === 'aguardando_horario') {

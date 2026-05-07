@@ -15,20 +15,35 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")! // Use Service Role para garantir leitura
     )
 
-    // --- 🛑 NOVO: VALIDAÇÃO DE BLOQUEIO (AGENDA_CONFIG) ---
-    const { data: config, error: configError } = await supabase
+    // --- 🛑 1. VALIDAÇÃO DE BLOQUEIO DO SALÃO (AGENDA_CONFIG) ---
+    const { data: configSalao, error: configError } = await supabase
       .from("agenda_config")
       .select("trabalha")
       .eq("salao_id", salao_id)
       .eq("data", data)
       .maybeSingle();
 
-    // Se existir registro e trabalha for false, retorna lista vazia IMEDIATAMENTE
-    if (config && config.trabalha === false) {
+    // Se o salão estiver fechado, retorna vazio IMEDIATAMENTE
+    if (configSalao && configSalao.trabalha === false) {
       return new Response(JSON.stringify([]), { status: 200 })
     }
 
-    // --- SEGUIR COM A BUSCA NORMAL ---
+    // --- 🛑 2. NOVO: VALIDAÇÃO DE FOLGA DO PROFISSIONAL (PROFISSIONAL_AGENDA_CONFIG) ---
+    if (profissional_id) {
+      const { data: configProf } = await supabase
+        .from("profissional_agenda_config")
+        .select("trabalha")
+        .eq("profissional_id", profissional_id)
+        .eq("data", data)
+        .maybeSingle();
+
+      // Se existir registro de folga para este profissional, retorna vazio IMEDIATAMENTE
+      if (configProf && configProf.trabalha === false) {
+        return new Response(JSON.stringify([]), { status: 200 })
+      }
+    }
+
+    // --- 3. SEGUIR COM A BUSCA NORMAL ---
     let query = supabase
       .from("horarios_disponiveis")
       .select("horario")
